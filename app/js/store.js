@@ -1,0 +1,216 @@
+// Persistence: one versioned JSON blob in localStorage.
+// Installed home-screen apps on iOS keep their storage; we also ask for persistent storage.
+import { uid, clampCycleDay } from './logic.js';
+
+export const STORAGE_KEY = 'pinkas.v1';
+export const SCHEMA = 1;
+
+// Muted, earthy marker colours — distinguishable, never neon.
+export const PALETTE = ['#B5532C', '#5B7A4E', '#3F6E8C', '#A8862F', '#7A5C8E', '#8C4A4A', '#4E7F7A', '#6B6B5A', '#9A6B3F', '#5A6B8C'];
+
+export function defaultCategories() {
+  const names = [
+    ['אוכל בחוץ', 60000],
+    ['סופר', 0],
+    ['תחבורה ודלק', 0],
+    ['בילויים', 0],
+    ['קניות', 0],
+    ['חשבונות', 0],
+    ['מנויים', 0],
+    ['ביטוחים', 0],
+    ['בריאות', 0],
+    ['אחר', 0],
+  ];
+  return names.map(([name, budget], i) => ({ id: uid() + i, name, budget, color: PALETTE[i % PALETTE.length], archived: false }));
+}
+
+export function defaultState() {
+  return {
+    schema: SCHEMA,
+    onboarded: false,
+    settings: {
+      currency: '₪',
+      cycleDay: 1,
+      income: 0,
+      monthlyBudget: 0,
+      alertAt: 0.8,
+      confirmOver: true,
+      waitHours: 48,
+      theme: 'auto',
+      installHintDismissed: false,
+      focusCatId: null,
+      lastBackupAt: 0,
+      checkInDay: 10,
+      checkInPrompted: '',
+      lastReportSeen: '',
+    },
+    categories: defaultCategories(),
+    expenses: [],
+    recurring: [],
+    goals: [],
+    wishlist: [],
+    resisted: [],
+    snapshots: [],
+    placePrefs: {},
+    spreads: [],
+  };
+}
+
+const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v);
+const isInt = (v) => Number.isInteger(v) && v >= 0;
+const isDate = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
+const str = (v, max = 120) => (typeof v === 'string' ? v.slice(0, max) : '');
+
+// Normalises any (possibly older or hand-edited) object into a valid state. Throws on garbage.
+export function normalize(raw) {
+  if (!isObj(raw)) throw new Error('הקובץ לא נראה כמו גיבוי של פנקס.');
+  if (!Array.isArray(raw.categories) || !Array.isArray(raw.expenses)) {
+    throw new Error('בקובץ חסרות קטגוריות או הוצאות, ולכן אי אפשר לשחזר ממנו.');
+  }
+  const base = defaultState();
+  const s = isObj(raw.settings) ? raw.settings : {};
+  const settings = {
+    ...base.settings,
+    currency: str(s.currency, 4) || '₪',
+    cycleDay: clampCycleDay(s.cycleDay ?? 1),
+    income: isInt(s.income) ? s.income : 0,
+    monthlyBudget: isInt(s.monthlyBudget) ? s.monthlyBudget : 0,
+    alertAt: typeof s.alertAt === 'number' && s.alertAt >= 0.5 && s.alertAt <= 1 ? s.alertAt : 0.8,
+    confirmOver: s.confirmOver !== false,
+    waitHours: isInt(s.waitHours) && s.waitHours > 0 ? s.waitHours : 48,
+    theme: ['auto', 'light', 'dark'].includes(s.theme) ? s.theme : 'auto',
+    installHintDismissed: !!s.installHintDismissed,
+  };
+  const categories = raw.categories
+    .filter((c) => isObj(c) && c.id && str(c.name))
+    .map((c, i) => ({
+      id: String(c.id),
+      name: str(c.name, 30),
+      budget: isInt(c.budget) ? c.budget : 0,
+      color: /^#[0-9a-f]{6}$/i.test(c.color) ? c.color : PALETTE[i % PALETTE.length],
+      archived: !!c.archived,
+    }));
+  if (!categories.length) throw new Error('בקובץ אין אף קטגוריה תקינה.');
+  const catIds = new Set(categories.map((c) => c.id));
+  settings.focusCatId = catIds.has(String(s.focusCatId)) ? String(s.focusCatId) : null;
+  settings.lastBackupAt = Number.isFinite(s.lastBackupAt) ? s.lastBackupAt : 0;
+  settings.checkInDay = clampCycleDay(s.checkInDay ?? 10);
+  settings.checkInPrompted = /^\d{4}-\d{2}$/.test(s.checkInPrompted) ? s.checkInPrompted : '';
+  settings.lastReportSeen = isDate(s.lastReportSeen) ? s.lastReportSeen : '';
+
+  const snapshots = (Array.isArray(raw.snapshots) ? raw.snapshots : [])
+    .filter((x) => isObj(x) && /^\d{4}-\d{2}$/.test(x.period) && isDate(x.date))
+    .map((x) => ({
+      id: String(x.id || uid()),
+      period: x.period,
+      date: x.date,
+      income: isInt(x.income) ? x.income : 0,
+      cash: isInt(x.cash) ? x.cash : 0,
+      investments: isInt(x.investments) ? x.investments : 0,
+      savings: isInt(x.savings) ? x.savings : 0,
+      savedAt: Number.isFinite(x.savedAt) ? x.savedAt : Date.now(),
+    }));
+  const placePrefs = {};
+  if (isObj(raw.placePrefs)) {
+    for (const [k, v] of Object.entries(raw.placePrefs)) {
+      if (!isObj(v) || !k.trim()) continue;
+      placePrefs[k.slice(0, 80)] = { catId: catIds.has(String(v.catId)) ? String(v.catId) : null, hidden: !!v.hidden };
+    }
+  }
+  const fallbackCat = categories[categories.length - 1].id;
+  const expenses = raw.expenses
+    .filter((e) => isObj(e) && isInt(e.amount) && e.amount > 0 && isDate(e.date))
+    .map((e) => ({
+      id: String(e.id || uid()),
+      amount: e.amount,
+      catId: catIds.has(String(e.catId)) ? String(e.catId) : fallbackCat,
+      note: str(e.note, 80),
+      date: e.date,
+      createdAt: Number.isFinite(e.createdAt) ? e.createdAt : Date.now(),
+      ...(e.recurringId ? { recurringId: String(e.recurringId) } : {}),
+      ...(e.spreadId ? { spreadId: String(e.spreadId) } : {}),
+    }));
+  const recurring = (Array.isArray(raw.recurring) ? raw.recurring : [])
+    .filter((r) => isObj(r) && isInt(r.amount) && r.amount > 0)
+    .map((r) => ({
+      id: String(r.id || uid()),
+      name: str(r.name, 40) || 'הוצאה קבועה',
+      amount: r.amount,
+      catId: catIds.has(String(r.catId)) ? String(r.catId) : fallbackCat,
+      day: Math.min(31, Math.max(1, Math.round(Number(r.day) || 1))),
+      startMonth: /^\d{4}-\d{2}$/.test(r.startMonth) ? r.startMonth : null,
+      lastMonth: /^\d{4}-\d{2}$/.test(r.lastMonth) ? r.lastMonth : null,
+      active: r.active !== false,
+    }));
+  const goals = (Array.isArray(raw.goals) ? raw.goals : [])
+    .filter((g) => isObj(g) && isInt(g.target) && g.target > 0)
+    .map((g) => ({ id: String(g.id || uid()), name: str(g.name, 40) || 'מטרה', target: g.target, saved: isInt(g.saved) ? g.saved : 0, createdAt: Number(g.createdAt) || Date.now() }));
+  const wishlist = (Array.isArray(raw.wishlist) ? raw.wishlist : [])
+    .filter((w) => isObj(w) && isInt(w.amount))
+    .map((w) => ({
+      id: String(w.id || uid()),
+      name: str(w.name, 60) || 'פריט',
+      amount: w.amount,
+      catId: catIds.has(String(w.catId)) ? String(w.catId) : null,
+      addedAt: Number(w.addedAt) || Date.now(),
+      waitHours: isInt(w.waitHours) && w.waitHours > 0 ? w.waitHours : 48,
+      status: ['waiting', 'bought', 'skipped'].includes(w.status) ? w.status : 'waiting',
+    }));
+  const resisted = (Array.isArray(raw.resisted) ? raw.resisted : [])
+    .filter((r) => isObj(r) && isInt(r.amount) && r.amount > 0 && isDate(r.date))
+    .map((r) => ({ id: String(r.id || uid()), name: str(r.name, 60), amount: r.amount, date: r.date, goalId: r.goalId ? String(r.goalId) : null, catId: r.catId ? String(r.catId) : null }));
+
+  const spreads = (Array.isArray(raw.spreads) ? raw.spreads : [])
+    .filter((x) => isObj(x) && isInt(x.total) && x.total > 0 && isDate(x.start))
+    .map((x) => ({
+      id: String(x.id || uid()),
+      name: str(x.name, 40) || 'הוצאה שנתית',
+      total: x.total,
+      catId: catIds.has(String(x.catId)) ? String(x.catId) : fallbackCat,
+      start: x.start,
+      months: Math.min(36, Math.max(1, Math.round(Number(x.months) || 12))),
+      createdAt: Number.isFinite(x.createdAt) ? x.createdAt : Date.now(),
+    }));
+
+  return { schema: SCHEMA, onboarded: raw.onboarded !== false, settings, categories, expenses, recurring, goals, wishlist, resisted, snapshots, placePrefs, spreads };
+}
+
+export function load(storage = globalThis.localStorage) {
+  try {
+    const txt = storage.getItem(STORAGE_KEY);
+    if (!txt) return defaultState();
+    return normalize(JSON.parse(txt));
+  } catch (err) {
+    console.warn('pinkas: could not read saved data, starting fresh', err);
+    // keep the broken copy so nothing is silently lost
+    try {
+      const txt = storage.getItem(STORAGE_KEY);
+      if (txt) storage.setItem(STORAGE_KEY + '.broken.' + Date.now(), txt);
+    } catch {}
+    return defaultState();
+  }
+}
+
+export function save(state, storage = globalThis.localStorage) {
+  try {
+    storage.setItem(STORAGE_KEY, JSON.stringify(state));
+    return true;
+  } catch (err) {
+    console.error('pinkas: save failed', err);
+    return false;
+  }
+}
+
+export function exportJSON(state) {
+  return JSON.stringify({ app: 'pinkas', exportedAt: new Date().toISOString(), ...state }, null, 1);
+}
+
+export function importJSON(text) {
+  let raw;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    throw new Error('הקובץ פגום או שאינו קובץ JSON. נסו לייצא גיבוי חדש.');
+  }
+  return normalize(raw);
+}

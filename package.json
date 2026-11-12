@@ -1,0 +1,9 @@
+{
+  "name": "pinkas",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test tests/logic.test.mjs tests/features.test.mjs tests/spread.test.mjs"
+  }
+}
