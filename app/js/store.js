@@ -1,6 +1,6 @@
 // Persistence: one versioned JSON blob in localStorage.
 // Installed home-screen apps on iOS keep their storage; we also ask for persistent storage.
-import { uid, clampCycleDay } from './logic.js';
+import { uid, clampCycleDay, ASSET_TYPES } from './logic.js';
 
 export const STORAGE_KEY = 'pinkas.v1';
 export const SCHEMA = 1;
@@ -43,7 +43,13 @@ export function defaultState() {
       checkInDay: 10,
       checkInPrompted: '',
       lastReportSeen: '',
+      lastStorySeen: '',
+      piggyGoalId: null,
+      lastSeenVersion: '',
+      tourDone: false,
+      installGuideSeen: false,
     },
+    invest: { status: null, profile: null, broker: null, pension: null },
     categories: defaultCategories(),
     expenses: [],
     recurring: [],
@@ -98,19 +104,27 @@ export function normalize(raw) {
   settings.checkInDay = clampCycleDay(s.checkInDay ?? 10);
   settings.checkInPrompted = /^\d{4}-\d{2}$/.test(s.checkInPrompted) ? s.checkInPrompted : '';
   settings.lastReportSeen = isDate(s.lastReportSeen) ? s.lastReportSeen : '';
+  settings.lastStorySeen = isDate(s.lastStorySeen) ? s.lastStorySeen : '';
+  settings.lastSeenVersion = str(s.lastSeenVersion, 12);
+  settings.tourDone = !!s.tourDone;
+  settings.installGuideSeen = !!s.installGuideSeen;
 
   const snapshots = (Array.isArray(raw.snapshots) ? raw.snapshots : [])
     .filter((x) => isObj(x) && /^\d{4}-\d{2}$/.test(x.period) && isDate(x.date))
-    .map((x) => ({
-      id: String(x.id || uid()),
-      period: x.period,
-      date: x.date,
-      income: isInt(x.income) ? x.income : 0,
-      cash: isInt(x.cash) ? x.cash : 0,
-      investments: isInt(x.investments) ? x.investments : 0,
-      savings: isInt(x.savings) ? x.savings : 0,
-      savedAt: Number.isFinite(x.savedAt) ? x.savedAt : Date.now(),
-    }));
+    .map((x) => {
+      // older backups: cash / investments / savings -> עו״ש / תיק השקעות / פיקדונות
+      const src = isObj(x.assets) ? x.assets : { checking: x.cash, stocks: x.investments, deposits: x.savings };
+      const assets = {};
+      for (const t of ASSET_TYPES) assets[t.key] = isInt(src[t.key]) ? src[t.key] : 0;
+      return {
+        id: String(x.id || uid()),
+        period: x.period,
+        date: x.date,
+        income: isInt(x.income) ? x.income : 0,
+        assets,
+        savedAt: Number.isFinite(x.savedAt) ? x.savedAt : Date.now(),
+      };
+    });
   const placePrefs = {};
   if (isObj(raw.placePrefs)) {
     for (const [k, v] of Object.entries(raw.placePrefs)) {
@@ -145,7 +159,39 @@ export function normalize(raw) {
     }));
   const goals = (Array.isArray(raw.goals) ? raw.goals : [])
     .filter((g) => isObj(g) && isInt(g.target) && g.target > 0)
-    .map((g) => ({ id: String(g.id || uid()), name: str(g.name, 40) || 'מטרה', target: g.target, saved: isInt(g.saved) ? g.saved : 0, createdAt: Number(g.createdAt) || Date.now() }));
+    .map((g) => ({
+      id: String(g.id || uid()),
+      name: str(g.name, 40) || 'מטרה',
+      target: g.target,
+      saved: isInt(g.saved) ? g.saved : 0,
+      createdAt: Number(g.createdAt) || Date.now(),
+      celebratedAt: Number.isFinite(g.celebratedAt) ? g.celebratedAt : 0,
+    }));
+  settings.piggyGoalId = goals.some((g) => g.id === String(s.piggyGoalId)) ? String(s.piggyGoalId) : null;
+
+  // investments section: answers to the questionnaire
+  const ri = isObj(raw.invest) ? raw.invest : {};
+  const rp = isObj(ri.profile) ? ri.profile : null;
+  const invest = {
+    status: ['investing', 'invested', 'want'].includes(ri.status) ? ri.status : null,
+    profile: rp
+      ? {
+          horizon: ['short', 'mid', 'long', 'xlong'].includes(rp.horizon) ? rp.horizon : 'long',
+          goal: ['emergency', 'home', 'retire', 'goal', 'grow'].includes(rp.goal) ? rp.goal : 'grow',
+          lump: isInt(rp.lump) ? rp.lump : 0,
+          monthly: isInt(rp.monthly) ? rp.monthly : 0,
+          market: rp.market === 'us' ? 'us' : 'ta',
+        }
+      : null,
+    broker: typeof ri.broker === 'string' ? ri.broker.slice(0, 20) : null,
+    pension: isObj(ri.pension)
+      ? {
+          monthly: isInt(ri.pension.monthly) ? ri.pension.monthly : 0,
+          depositFee: Number.isFinite(ri.pension.depositFee) ? Math.min(0.06, Math.max(0, ri.pension.depositFee)) : 0,
+          savingsFee: Number.isFinite(ri.pension.savingsFee) ? Math.min(0.005, Math.max(0, ri.pension.savingsFee)) : 0,
+        }
+      : null,
+  };
   const wishlist = (Array.isArray(raw.wishlist) ? raw.wishlist : [])
     .filter((w) => isObj(w) && isInt(w.amount))
     .map((w) => ({
@@ -184,7 +230,7 @@ export function normalize(raw) {
       createdAt: Number.isFinite(x.createdAt) ? x.createdAt : Date.now(),
     }));
 
-  return { schema: SCHEMA, onboarded: raw.onboarded !== false, settings, categories, expenses, recurring, goals, wishlist, resisted, snapshots, placePrefs, spreads, incomes };
+  return { schema: SCHEMA, onboarded: raw.onboarded !== false, settings, categories, expenses, recurring, goals, wishlist, resisted, snapshots, placePrefs, spreads, incomes, invest };
 }
 
 export function load(storage = globalThis.localStorage) {

@@ -518,14 +518,131 @@ export function checkInStatus(state, today) {
   return { period, day, date: `${period}-${pad(day)}`, due: !snap, snap };
 }
 
+/* ---------- assets (Israeli money map) ---------- */
+export const ASSET_TYPES = [
+  { key: 'checking', label: 'עו״ש', group: 'liquid', hint: 'היתרה בחשבון הבנק' },
+  { key: 'cash', label: 'מזומן', group: 'liquid', hint: 'בארנק ובבית' },
+  { key: 'deposits', label: 'פיקדונות וחסכונות', group: 'liquid', hint: 'פיקדון בבנק, תוכנית חיסכון' },
+  { key: 'stocks', label: 'תיק השקעות', group: 'invest', hint: 'מניות, קרנות סל, קרנות נאמנות' },
+  { key: 'gemel', label: 'קופת גמל להשקעה', group: 'invest', hint: '' },
+  { key: 'crypto', label: 'קריפטו', group: 'invest', hint: '' },
+  { key: 'hishtalmut', label: 'קרן השתלמות', group: 'longterm', hint: 'לפי הדוח האחרון' },
+  { key: 'pension', label: 'פנסיה וביטוח מנהלים', group: 'longterm', hint: 'הסכום שנצבר' },
+  { key: 'other', label: 'אחר', group: 'invest', hint: '' },
+];
+export const ASSET_GROUPS = [
+  { key: 'liquid', label: 'נזיל', hint: 'עו״ש, מזומן ופיקדונות' },
+  { key: 'invest', label: 'השקעות', hint: 'תיק, גמל להשקעה, קריפטו' },
+  { key: 'longterm', label: 'חיסכון לטווח ארוך', hint: 'פנסיה וקרן השתלמות' },
+];
+
+// Snapshots from older versions only had cash / investments / savings
+export function snapshotAssets(s) {
+  if (!s) return {};
+  if (s.assets) return s.assets;
+  return { checking: s.cash || 0, stocks: s.investments || 0, deposits: s.savings || 0 };
+}
+
+export function groupTotals(s) {
+  const a = snapshotAssets(s);
+  const out = { liquid: 0, invest: 0, longterm: 0 };
+  for (const t of ASSET_TYPES) out[t.group] += a[t.key] || 0;
+  return out;
+}
+
 export function netWorth(s) {
-  return s ? (s.cash || 0) + (s.investments || 0) + (s.savings || 0) : 0;
+  const a = snapshotAssets(s);
+  return Object.values(a).reduce((t, v) => t + (v || 0), 0);
 }
 
 export function netWorthSeries(snapshots) {
   return [...(snapshots || [])]
     .sort((a, b) => (a.period < b.period ? -1 : 1))
-    .map((s) => ({ period: s.period, total: netWorth(s), cash: s.cash || 0, investments: s.investments || 0, savings: s.savings || 0, income: s.income || 0 }));
+    .map((s) => ({ period: s.period, total: netWorth(s), ...groupTotals(s), assets: snapshotAssets(s), income: s.income || 0 }));
+}
+
+/* ---------- growth math ---------- */
+// Future value of a lump sum + a fixed monthly deposit, compounded monthly.
+export function futureValue({ monthly = 0, lump = 0, years, annualRate }) {
+  const n = Math.round(years * 12);
+  const r = annualRate / 12;
+  if (!r) return Math.round(lump + monthly * n);
+  const g = Math.pow(1 + r, n);
+  return Math.round(lump * g + monthly * ((g - 1) / r));
+}
+
+// Average monthly spending over the last N finished cycles (for an emergency-fund target)
+export function avgMonthlySpend(state, today, cycles = 3) {
+  const cur = cycleFor(today, state.settings.cycleDay);
+  const totals = [];
+  for (let i = 1; i <= cycles; i++) {
+    const t = sumBy(expensesInCycle(state.expenses, shiftCycle(cur, -i)));
+    if (t) totals.push(t);
+  }
+  if (!totals.length) {
+    const sofar = sumBy(expensesInCycle(state.expenses, cur));
+    return sofar ? Math.round(sofar / Math.max(1, (dayDiff(cur.start, today) + 1) / 30)) : 0;
+  }
+  return Math.round(totals.reduce((a, b) => a + b, 0) / totals.length);
+}
+
+/* ---------- the monthly story (shown from the check-in day) ---------- */
+export function lastFinishedCycle(state, today) {
+  return shiftCycle(cycleFor(today, state.settings.cycleDay), -1);
+}
+
+// The story of a finished cycle becomes available on the first check-in day on/after the cycle ends.
+export function storyAvailableFrom(cycle, checkInDay = 10) {
+  const day = clampCycleDay(checkInDay);
+  const end = cycle.end;
+  const key = monthKey(end);
+  const sameMonth = `${key}-${pad(day)}`;
+  return sameMonth >= end ? sameMonth : `${nextMonthKey(key)}-${pad(day)}`;
+}
+
+export function pendingStory(state, today) {
+  const c = lastFinishedCycle(state, today);
+  if (!expensesInCycle(state.expenses, c).length) return null;
+  if (state.settings.lastStorySeen === c.start) return null;
+  if (today < storyAvailableFrom(c, state.settings.checkInDay ?? 10)) return null;
+  return c;
+}
+
+export const ILLUSTRATIVE_RETURN = 0.06; // shown as an assumption, never a promise
+
+export function monthStory(state, cycle, today) {
+  const report = monthlyReport(state, cycle, today);
+  const exps = expensesInCycle(state.expenses, cycle);
+  const variable = exps.filter((e) => !e.recurringId);
+  const biggest = variable.reduce((a, b) => (!a || b.amount > a.amount ? b : a), null);
+  const topPlace = learnPlaces(variable, state.placePrefs, 2).sort((a, b) => b.total - a.total)[0] || null;
+  const tipsSaving = report.tips.reduce((t, x) => t + x.saving, 0);
+  const varTotal = sumBy(variable);
+  // a realistic amount: what the tips point at, but never more than 20% of day-to-day spending
+  let monthly = Math.min(tipsSaving, Math.round(varTotal * 0.2));
+  if (!monthly) monthly = Math.round(varTotal * 0.1);
+  monthly = Math.round(monthly / 1000) * 1000; // round to ₪10
+  const series = netWorthSeries(state.snapshots);
+  const nwNow = series[series.length - 1] || null;
+  const nwPrev = series[series.length - 2] || null;
+  const goal = (state.goals || []).find((g) => g.id === state.settings.piggyGoalId) || (state.goals || []).find((g) => g.saved < g.target) || null;
+  return {
+    cycle,
+    report,
+    top: categoryShares(state, cycle).slice(0, 5),
+    biggest,
+    topPlace,
+    invest: {
+      monthly,
+      rate: ILLUSTRATIVE_RETURN,
+      y10: futureValue({ monthly, years: 10, annualRate: ILLUSTRATIVE_RETURN }),
+      y20: futureValue({ monthly, years: 20, annualRate: ILLUSTRATIVE_RETURN }),
+      deposited10: monthly * 120,
+    },
+    nw: nwNow,
+    nwChange: nwNow && nwPrev ? nwNow.total - nwPrev.total : null,
+    goal,
+  };
 }
 
 export function monthLabelFromKey(key) {

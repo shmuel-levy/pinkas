@@ -54,14 +54,58 @@
 
     <main id="view" tabindex="-1"></main>
 
+    <button type="button" class="story-fab" id="story-fab" hidden>
+      <svg class="fab-coin" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="13"/><circle cx="16" cy="16" r="8.5" class="fab-coin-in"/><path d="M13 12v8M13 12h3.5a2.5 2.5 0 0 1 0 5H13M19 13v7" class="fab-coin-mark"/></svg>
+      <span id="story-fab-label">הסיכום החודשי</span>
+    </button>
+
     <nav class="tabs" id="tabs" aria-label="ניווט ראשי">
-      <button type="button" data-tab="home">החודש</button>
-      <button type="button" data-tab="ledger">יומן</button>
-      <button type="button" class="tab-add" id="btn-add" aria-label="רישום חדש"><span aria-hidden="true">+</span> רישום</button>
-      <button type="button" data-tab="save">חיסכון</button>
-      <button type="button" data-tab="insights">תובנות</button>
+      <button type="button" data-tab="home">
+        <svg class="tab-ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="6" width="17" height="13" rx="2.5"/><path d="M3.5 10h17M15.5 14.5h2"/></svg><span>החודש</span>
+      </button>
+      <button type="button" data-tab="ledger">
+        <svg class="tab-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 7h11M8 12h11M8 17h11"/><circle cx="4.5" cy="7" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="17" r="1"/></svg><span>יומן</span>
+      </button>
+      <button type="button" data-tab="save">
+        <svg class="tab-ic" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="11" cy="13" rx="7.5" ry="5.5"/><path d="M18 11.5h2v3h-2M8 18.5v1.5M14 18.5v1.5M9.5 7.6h3"/></svg><span>חיסכון</span>
+      </button>
+      <button type="button" class="tab-add" id="btn-add" aria-label="רישום חדש"><span aria-hidden="true">+</span></button>
+      <button type="button" data-tab="invest">
+        <svg class="tab-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 17l5.5-5.5 4 4 7-8"/><path d="M15 7.5h5v5"/></svg><span>השקעות</span>
+      </button>
+      <button type="button" data-tab="insights">
+        <svg class="tab-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V12M10 20V6M15 20v-9M20 20V9"/></svg><span>תובנות</span>
+      </button>
     </nav>
   </div>
+
+  <!-- Monthly story -->
+  <dialog class="story" id="story" aria-label="הסיכום החודשי">
+    <div class="story-top">
+      <div class="story-bars" id="story-bars" aria-hidden="true"></div>
+      <button type="button" class="story-x" id="story-close" aria-label="סגירת הסיכום">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="story-stage" id="story-stage" aria-live="polite"></div>
+    <div class="story-nav">
+      <button type="button" class="btn btn-gold" id="story-next">הבא</button>
+      <button type="button" class="link link-on-dark" id="story-prev">הקודם</button>
+    </div>
+  </dialog>
+
+  <!-- Goal reached -->
+  <dialog class="sheet sheet-celebrate" id="sheet-celebrate" aria-labelledby="celebrate-title">
+    <div class="sheet-body">
+      <div class="celebrate-art" id="celebrate-art"></div>
+      <h2 id="celebrate-title"></h2>
+      <p id="celebrate-text" class="over-text"></p>
+      <div class="sheet-actions">
+        <button type="button" class="btn btn-primary" id="celebrate-new">מטרה חדשה</button>
+        <button type="button" class="link" data-close>סגירה</button>
+      </div>
+    </div>
+  </dialog>
 
   <!-- Add / edit expense -->
   <dialog class="sheet" id="sheet-add" aria-labelledby="add-title">

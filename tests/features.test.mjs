@@ -204,7 +204,10 @@ test('old backups gain the new fields with safe defaults', () => {
     placePrefs: { 'ארומה': { catId: 'x', hidden: false }, bad: 7, 'שופרסל': { catId: 'ghost' } },
   });
   assert.equal(withData.snapshots.length, 1);
-  assert.equal(withData.snapshots[0].investments, 0);
+  // old fields migrate into the asset map: cash -> עו״ש, bad investments -> 0
+  assert.equal(withData.snapshots[0].assets.checking, 5);
+  assert.equal(withData.snapshots[0].assets.stocks, 0);
+  assert.equal(L.netWorth(withData.snapshots[0]), 5);
   assert.deepEqual(withData.placePrefs['ארומה'], { catId: 'x', hidden: false });
   assert.equal(withData.placePrefs.bad, undefined);
   assert.deepEqual(withData.placePrefs['שופרסל'], { catId: null, hidden: false });

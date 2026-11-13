@@ -1,6 +1,6 @@
 // פנקס service worker: the whole app works offline.
 // Bump VERSION whenever any app file changes so phones pick up the update.
-const VERSION = 'pinkas-1.3.0';
+const VERSION = 'pinkas-1.4.0';
 const SHELL = [
   './',
   './index.html',
@@ -8,6 +8,12 @@ const SHELL = [
   './js/app.js',
   './js/logic.js',
   './js/store.js',
+  './js/fx.js',
+  './js/piggy.js',
+  './js/story.js',
+  './js/invest.js',
+  './js/investui.js',
+  './js/onboard.js',
   './manifest.webmanifest',
   './img/guilloche.svg',
   './icons/apple-touch-icon.png',

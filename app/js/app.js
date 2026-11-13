@@ -1,12 +1,25 @@
 import * as L from './logic.js';
 import * as S from './store.js';
+import * as FX from './fx.js';
+import { piggySVG, settlePiggy } from './piggy.js';
+import { createStory } from './story.js';
+import { createInvest } from './investui.js';
+import { createOnboarding, CHANGELOG, isStandalone as standalone, platform } from './onboard.js';
 
-const VERSION = '1.3.0';
+const VERSION = '1.4.0';
 
 /* ---------- state ---------- */
 let state = S.load();
+const bootParams = new URLSearchParams(location.search);
 const ui = {
   tab: 'home',
+  introStep: 0,
+  introDone: false,
+  // a friend's shared link, or a first visit on a phone browser: show how to install first
+  showInstall: !standalone() && (bootParams.get('ref') === 'share' || (!state.onboarded && platform().mobile && !state.settings.installGuideSeen)),
+  fromShare: bootParams.get('ref') === 'share',
+  heroCounted: false,
+  piggyFrom: null,
   settings: false,
   report: null, // start date of the cycle whose report is open
   ledgerOffset: 0,
@@ -68,11 +81,11 @@ function renderHome() {
   const fc = focusCat();
   const parts = [];
 
-  // Monthly notices: check-in due, last month's report ready
+  // Monthly notices: check-in due, policies to renew. (The monthly story has its own floating button.)
   const ci = L.checkInStatus(state, t);
-  const pend = L.pendingReport(state, t);
+  const pend = null;
   const renew = renewalsDue(t);
-  if (ci.due || pend || renew.length) {
+  if (ci.due || renew.length) {
     parts.push(`<div class="notices">
       ${renew.map((s) => { const d = L.spreadInfo(s, t).daysToEnd; return `<button type="button" class="notice" data-act="edit-spread" data-id="${s.id}"><span class="notice-k">${esc(s.name)} מתחדש ${d === 0 ? 'היום' : d === 1 ? 'מחר' : `בעוד ${d} ימים`}</span><span class="notice-t">זה הזמן להשוות מחירים לפני שזה מתחדש לבד.</span><span class="notice-go" aria-hidden="true">←</span></button>`; }).join('')}
       ${ci.due ? `<button type="button" class="notice" data-act="checkin"><span class="notice-k">צ׳ק־אין ${esc(L.MONTHS[Number(ci.period.slice(5, 7)) - 1])}</span><span class="notice-t">כמה נכנס, כמה בעו״ש ובהשקעות. דקה אחת.</span><span class="notice-go" aria-hidden="true">←</span></button>` : ''}
@@ -85,7 +98,7 @@ function renderHome() {
     const neg = o.todayLeft < 0;
     parts.push(`<section class="hero vault" aria-labelledby="hero-l">
       <p class="eyebrow" id="hero-l">${neg ? 'חרגת היום ב־' : 'אפשר להוציא היום'}</p>
-      <p class="hero-num ${neg ? 'neg' : ''}">${m(Math.abs(o.todayLeft), { round: true })}</p>
+      <p class="hero-num ${neg ? 'neg' : ''}"><span class="num" data-count="${Math.abs(o.todayLeft)}">${esc(money(Math.abs(o.todayLeft), { round: true }))}</span></p>
       <p class="hero-sub">${o.left >= 0
         ? `נשארו <strong>${m(o.left, { round: true })}</strong> עד ${endLabel(sum.cycle)} — ${daysWord(o.daysLeft)}, בערך ${m(o.daysLeft ? Math.floor(o.left / o.daysLeft) : 0, { round: true })} ליום.`
         : `עברת את התקציב החודשי ב־<strong>${m(-o.left, { round: true })}</strong>. מכאן כל שקל שנחסך מקטין את החור.`}
@@ -367,32 +380,69 @@ function renderNetWorth() {
   const ci = L.checkInStatus(state, today());
   if (!series.length) {
     return `<section class="vault nw" aria-labelledby="nw-h">
-      <p class="vault-label" id="nw-h">השווי שלך</p>
-      <p class="nw-empty">כמה שווה כל הכסף שלך — עו״ש, השקעות וחיסכון? פעם בחודש, ב־${state.settings.checkInDay} לחודש, מזינים שלושה מספרים ורואים את ההון גדל.</p>
+      <p class="vault-label" id="nw-h">מפת הכסף שלך</p>
+      <p class="nw-empty">עו״ש, מזומן, פיקדונות, תיק השקעות, קרן השתלמות ופנסיה — הכל במקום אחד. פעם בחודש, ב־${state.settings.checkInDay} לחודש, מעדכנים ורואים את ההון גדל.</p>
       <button type="button" class="btn btn-gold" data-act="checkin">צ׳ק־אין ראשון</button>
     </section>`;
   }
   const last = series[series.length - 1];
   const prev = series[series.length - 2];
   const change = prev ? last.total - prev.total : null;
-  const parts = [
-    ['עו״ש ומזומן', last.cash, 'seg-cash'],
-    ['השקעות', last.investments, 'seg-inv'],
-    ['חיסכון', last.savings, 'seg-sav'],
-  ];
+  const segCls = { liquid: 'seg-cash', invest: 'seg-inv', longterm: 'seg-sav' };
   const total = Math.max(1, last.total);
-  const seg = parts.filter((p) => p[1] > 0).map((p) => `<span class="${p[2]}" style="width:${((p[1] / total) * 100).toFixed(1)}%"></span>`).join('');
+  const seg = L.ASSET_GROUPS.filter((g) => last[g.key] > 0).map((g) => `<span class="${segCls[g.key]}" style="width:${((last[g.key] / total) * 100).toFixed(1)}%"></span>`).join('');
   const label = `השווי לאורך ${series.length} חודשים: ` + series.map((s) => `${L.monthLabelFromKey(s.period)} ${money(s.total, { round: true })}`).join(', ');
   return `<section class="vault nw" aria-labelledby="nw-h">
     <div class="nw-top">
-      <p class="vault-label" id="nw-h">השווי שלך · ${esc(L.monthLabelFromKey(last.period))}</p>
+      <p class="vault-label" id="nw-h">מפת הכסף שלך · ${esc(L.monthLabelFromKey(last.period))}</p>
       <button type="button" class="link link-on-dark" data-act="checkin" data-period="${ci.due ? ci.period : last.period}">${ci.due ? 'צ׳ק־אין חדש' : 'עדכון'}</button>
     </div>
-    <p class="nw-num">${m(last.total, { round: true })}</p>
+    <p class="nw-num"><span class="num" data-count="${last.total}">${esc(money(last.total, { round: true }))}</span></p>
     ${change !== null ? `<p class="nw-change ${change >= 0 ? 'up' : 'down'}">${change >= 0 ? '▲' : '▼'} ${m(Math.abs(change), { round: true })} מהחודש הקודם</p>` : ''}
     ${sparkline(series.map((s) => s.total), { label })}
     <div class="nw-bar" aria-hidden="true">${seg}</div>
-    <ul class="nw-legend">${parts.map((p) => `<li><i class="${p[2]}" aria-hidden="true"></i><span>${p[0]}</span>${m(p[1], { round: true })}</li>`).join('')}</ul>
+    <ul class="nw-legend">${L.ASSET_GROUPS.map((g) => `<li><i class="${segCls[g.key]}" aria-hidden="true"></i><span>${g.label}</span>${m(last[g.key], { round: true })}</li>`).join('')}</ul>
+    <details class="nw-details">
+      <summary>לפי סוג</summary>
+      <ul>${L.ASSET_TYPES.filter((a) => last.assets[a.key]).map((a) => `<li><span>${esc(a.label)}</span>${m(last.assets[a.key], { round: true })}</li>`).join('')}</ul>
+    </details>
+  </section>`;
+}
+
+// The piggy bank: fills toward the chosen goal, explodes when it gets there
+function piggyGoal() {
+  return state.goals.find((g) => g.id === state.settings.piggyGoalId && g.saved < g.target)
+    || state.goals.find((g) => g.saved < g.target) || null;
+}
+function renderPiggy() {
+  const g = piggyGoal();
+  if (!g) {
+    return `<section class="piggy-box" aria-labelledby="pg-h">
+      <div class="piggy-art">${piggySVG(0, { label: 'קופה ריקה' })}</div>
+      <div class="piggy-info">
+        <p class="eyebrow" id="pg-h">קופת החיסכון</p>
+        <p class="piggy-goal">${state.goals.length ? 'כל המטרות הושגו' : 'בשביל מה חוסכים?'}</p>
+        <p class="small muted">מטרה עם שם וסכום — והקופה מתמלאת עם כל שקל שחסכת.</p>
+        <button type="button" class="btn btn-primary btn-small" data-act="new-goal">מטרה ${state.goals.length ? 'חדשה' : 'ראשונה'}</button>
+      </div>
+    </section>`;
+  }
+  const ratio = g.saved / g.target;
+  const from = ui.piggyFrom;
+  ui.piggyFrom = null;
+  const others = state.goals.filter((x) => x.saved < x.target && x.id !== g.id);
+  return `<section class="piggy-box" aria-labelledby="pg-h">
+    <div class="piggy-art">${piggySVG(ratio, { from, label: `${Math.round(ratio * 100)} אחוז מהמטרה ${g.name}` })}</div>
+    <div class="piggy-info">
+      <p class="eyebrow" id="pg-h">קופת החיסכון</p>
+      <p class="piggy-goal">${esc(g.name)}</p>
+      <p class="piggy-num"><span class="num" data-count="${g.saved}">${esc(money(g.saved, { round: true }))}</span> <span class="muted small">מתוך ${m(g.target, { round: true })}</span></p>
+      <p class="small muted">${Math.round(ratio * 100)}% · חסרים ${m(g.target - g.saved, { round: true })}</p>
+      <div class="piggy-actions">
+        <button type="button" class="btn btn-primary btn-small" data-act="deposit" data-id="${g.id}">הפקדה</button>
+        ${others.length ? '<button type="button" class="link small" data-act="piggy-switch">מטרה אחרת</button>' : ''}
+      </div>
+    </div>
   </section>`;
 }
 
@@ -402,7 +452,7 @@ function renderSave() {
   const resistedNow = state.resisted.filter((r) => L.inCycle(r.date, cycle));
   const resistedTotal = L.sumBy(state.resisted);
   const skippedWishes = state.wishlist.filter((w) => w.status === 'skipped');
-  const parts = [renderNetWorth()];
+  const parts = [renderPiggy(), renderNetWorth()];
 
   parts.push(`<section class="save-intro" aria-labelledby="res-h">
     <p class="eyebrow" id="res-h">נשאר אצלך בזכות ויתורים, במחזור הזה</p>
@@ -653,6 +703,7 @@ function renderReport() {
       <p class="hero-sub">${r.left >= 0 ? `שיעור חיסכון: <strong>${Math.round(r.rate * 100)}%</strong> מההכנסה.` : 'ההוצאות עברו את ההכנסה.'}</p>`
     : `<p class="eyebrow">הוצאות במחזור</p><p class="hero-num">${m(r.spent, { round: true })}</p>
       <p class="hero-sub">לא הוזנה הכנסה לחודש הזה, אז אין השוואה. <button type="button" class="link link-on-dark" data-act="checkin" data-period="${periodForCycle(c)}">להזין הכנסה</button></p>`}
+    ${r.complete && r.count ? `<button type="button" class="btn btn-gold btn-small rep-story" data-act="story" data-start="${c.start}">לצפות בסיכום כמסע</button>` : ''}
   </section>`);
 
   // income vs expenses
@@ -682,14 +733,15 @@ function renderReport() {
 
   // net worth change
   if (r.startSnap) {
-    const rows = [['עו״ש ומזומן', 'cash'], ['השקעות', 'investments'], ['חיסכון', 'savings']];
+    const ga = L.groupTotals(r.startSnap);
+    const gb = r.endSnap ? L.groupTotals(r.endSnap) : null;
     parts.push(`<section class="section-gap" aria-labelledby="nwr-h">
       <div class="sec-head"><h2 class="sec-title" id="nwr-h">השווי שלך</h2></div>
       <table class="cmp">
         <thead><tr><th scope="col"><span class="sr-only">סוג</span></th><th scope="col">בתחילה</th><th scope="col">${r.endSnap ? 'אחרי' : 'עכשיו'}</th><th scope="col">שינוי</th></tr></thead>
-        <tbody>${rows.map(([l, k]) => {
-          const a = r.startSnap[k] || 0;
-          const b = r.endSnap ? r.endSnap[k] || 0 : null;
+        <tbody>${L.ASSET_GROUPS.map(({ label: l, key: k }) => {
+          const a = ga[k] || 0;
+          const b = gb ? gb[k] || 0 : null;
           return `<tr><th scope="row" style="font-weight:500;text-align:start">${l}</th><td>${m(a, { round: true })}</td><td>${b === null ? '—' : m(b, { round: true })}</td><td class="${b === null || b === a ? 'muted' : b > a ? 'pos' : 'neg'}">${b === null || b === a ? '—' : m(b - a, { round: true, signed: true })}</td></tr>`;
         }).join('')}</tbody>
       </table>
@@ -807,10 +859,18 @@ function renderSettings() {
       <input type="file" id="restore-file" accept="application/json,.json" hidden>
     </section>
 
+    <section aria-labelledby="sx-h" class="set-group">
+      <div class="sec-head"><h2 class="sec-title" id="sx-h">פנקס</h2></div>
+      <div class="data-actions">
+        <button type="button" class="btn btn-primary" data-act="share">שליחה לחבר</button>
+        <button type="button" class="btn btn-line" data-act="install-guide">איך מתקינים (אייפון ואנדרואיד)</button>
+        <button type="button" class="btn btn-line" data-act="whats-new">מה חדש בגרסה</button>
+        <button type="button" class="btn btn-line" data-act="tour">סיור קצר באפליקציה</button>
+      </div>
+    </section>
+
     <section class="about">
-      <p><strong>התקנה באייפון:</strong></p>
-      <ol class="install-steps"><li>פותחים את הכתובת בספארי</li><li>כפתור השיתוף (ריבוע עם חץ)</li><li>״הוספה למסך הבית״</li></ol>
-      <p style="margin-top:12px">פנקס ${VERSION} · עובד גם בלי אינטרנט</p>
+      <p>פנקס ${VERSION} · עובד גם בלי אינטרנט · הנתונים נשמרים רק במכשיר</p>
     </section>`;
 }
 
@@ -867,10 +927,19 @@ function render() {
   const cycle = L.cycleFor(t, state.settings.cycleDay);
   applyTheme();
 
-  const onb = !state.onboarded;
+  // before the app proper: install guide -> intro slides -> 3 questions
+  const pre = ui.showInstall ? 'install' : !state.onboarded ? (ui.introDone ? 'onb' : 'intro') : null;
+  const onb = !!pre;
   const sub = ui.settings ? 'settings' : ui.report ? 'report' : null;
   $('#tabs').hidden = onb;
   $('#top').hidden = onb;
+  const story = !onb && L.pendingStory(state, t);
+  const fab = $('#story-fab');
+  fab.hidden = !story;
+  if (story) {
+    fab.dataset.start = story.start;
+    $('#story-fab-label').textContent = `הסיכום של ${L.cycleLabel(story)}`;
+  }
   $('#btn-back').hidden = !sub;
   $('#btn-settings').hidden = !!sub;
   $('#brand').textContent = sub === 'settings' ? 'הגדרות' : sub === 'report' ? 'סיכום חודשי' : 'פנקס';
@@ -882,12 +951,15 @@ function render() {
     else b.removeAttribute('aria-current');
   });
 
-  const key = onb ? 'onb' : sub || ui.tab;
-  const html = onb ? renderOnboarding()
+  const key = pre === 'intro' ? `intro${ui.introStep}` : pre || sub || ui.tab;
+  const html = pre === 'install' ? onboard.renderInstall({ fromShare: ui.fromShare })
+    : pre === 'intro' ? onboard.renderIntro(ui.introStep)
+    : pre === 'onb' ? renderOnboarding()
     : sub === 'settings' ? renderSettings()
     : sub === 'report' ? renderReport()
     : ui.tab === 'ledger' ? renderLedger()
     : ui.tab === 'save' ? renderSave()
+    : ui.tab === 'invest' ? investUI.render()
     : ui.tab === 'insights' ? renderInsights()
     : renderHome();
 
@@ -912,7 +984,18 @@ function render() {
       if (caret != null && el.setSelectionRange) try { el.setSelectionRange(caret, caret); } catch {}
     }
   }
-  document.title = onb ? 'פנקס' : sub === 'settings' ? 'הגדרות · פנקס' : sub === 'report' ? 'סיכום חודשי · פנקס' : `${{ home: 'החודש', ledger: 'יומן', save: 'חיסכון', insights: 'תובנות' }[ui.tab]} · פנקס`;
+  document.title = onb ? 'פנקס' : sub === 'settings' ? 'הגדרות · פנקס' : sub === 'report' ? 'סיכום חודשי · פנקס' : `${{ home: 'החודש', ledger: 'יומן', save: 'חיסכון', invest: 'השקעות', insights: 'תובנות' }[ui.tab]} · פנקס`;
+
+  // motion after paint: piggy fill, count-ups (hero once per session, the rest on tab entry)
+  view.querySelectorAll('.piggy').forEach(settlePiggy);
+  if (pre === 'intro') onboard.afterIntroRender();
+  const fresh = view.classList.contains('view-enter');
+  if (key === 'home' && !ui.heroCounted) {
+    ui.heroCounted = true;
+    FX.countAll(view.querySelector('.hero') || view, (v) => money(v, { round: true }), { duration: 1100 });
+  } else if (fresh && key !== 'home') {
+    FX.countAll(view, (v) => money(v, { round: true }));
+  }
 }
 
 function go(tab) {
@@ -1384,12 +1467,13 @@ $('#over-skip').addEventListener('click', () => {
 
 /* ---------- generic form sheet ---------- */
 let formSubmit = null;
-function openForm({ title, intro = '', fields, submit, onSubmit, extra = [] }) {
+function openForm({ title, intro = '', bodyHtml = '', fields, submit, onSubmit, extra = [] }) {
   $('#form-title').textContent = title;
   $('#form-intro').textContent = intro;
   $('#form-intro').hidden = !intro;
   $('#form-error').textContent = '';
-  $('#form-fields').innerHTML = fields.map((f) => {
+  $('#form-fields').innerHTML = bodyHtml + fields.map((f) => {
+    if (f.type === 'heading') return `<h3 class="form-heading">${esc(f.label)}</h3>`;
     const id = `f-${f.name}`;
     const hint = f.hint ? `<span class="hint" id="${id}-h">${esc(f.hint)}</span>` : '';
     const desc = f.hint ? `aria-describedby="${id}-h"` : '';
@@ -1415,6 +1499,7 @@ function openForm({ title, intro = '', fields, submit, onSubmit, extra = [] }) {
     const vals = {};
     $$('#form-fields [aria-invalid]').forEach((x) => x.removeAttribute('aria-invalid'));
     for (const f of fields) {
+      if (f.type === 'heading') continue;
       const el = $(`#f-${f.name}`);
       const name = `״${f.label.replace(/[?:]$/, '')}״`;
       if (f.type === 'check') vals[f.name] = el.checked;
@@ -1435,7 +1520,8 @@ function openForm({ title, intro = '', fields, submit, onSubmit, extra = [] }) {
   };
   openDialog($('#sheet-form'));
   const first = $('#form-fields input, #form-fields select');
-  first?.focus();
+  if (first) first.focus();
+  else $('#form-actions button')?.focus();
 }
 function fail(msg, el) {
   $('#form-error').textContent = msg;
@@ -1464,11 +1550,15 @@ function openResist(catId) {
       ...(goals.length ? [{ name: 'goal', label: 'להעביר למטרה', type: 'select', value: goals[0].id, options: [['', 'לא, רק לרשום'], ...goals.map((g) => [g.id, g.name])] }] : []),
     ],
     onSubmit: (v) => {
-      state.resisted.push({ id: L.uid(), name: v.name, amount: v.amount, date: today(), goalId: v.goal || null, catId: catId || null });
-      const g = v.goal && state.goals.find((x) => x.id === v.goal);
-      if (g) g.saved += v.amount;
-      commit();
-      toast(g ? `${money(v.amount)} נוספו ל${g.name}` : `${money(v.amount)} נשארו אצלך`);
+      state.resisted.push({ id: L.uid(), name: v.name, amount: v.amount, date: today(), goalId: null, catId: catId || null });
+      if (v.goal) {
+        // the resisted money goes into the piggy
+        state.resisted[state.resisted.length - 1].goalId = v.goal;
+        depositToGoal(v.goal, v.amount);
+      } else {
+        commit();
+        toast(`${money(v.amount)} נשארו אצלך`);
+      }
     },
   });
 }
@@ -1497,11 +1587,49 @@ function openDeposit(goal) {
     submit: 'להפקיד',
     fields: [{ name: 'amount', label: 'סכום', type: 'money', required: true, hint: `חסרים ${money(Math.max(0, goal.target - goal.saved))}` }],
     onSubmit: (v) => {
-      goal.saved += v.amount;
-      commit();
-      toast(goal.saved >= goal.target ? `הגעת ליעד של ${goal.name}!` : `${money(v.amount)} נוספו. חסרים ${money(goal.target - goal.saved)}`);
+      depositToGoal(goal.id, v.amount);
     },
   });
+}
+
+/**
+ * Adds money to a goal with the coin + fill animation, and celebrates when it reaches the target.
+ * slot: an element to drop the coin into (defaults to the piggy on screen). Returns true if done.
+ */
+function depositToGoal(goalId, amount, slot) {
+  const goal = state.goals.find((g) => g.id === goalId);
+  if (!goal || !amount) return false;
+  ui.piggyFrom = goal.saved / goal.target;
+  goal.saved += amount;
+  const reached = goal.saved >= goal.target && !goal.celebratedAt;
+  if (reached) goal.celebratedAt = Date.now();
+  FX.coinDrop(slot || $('#view .piggy-slot'));
+  FX.tick(15);
+  setTimeout(() => {
+    commit();
+    if (reached) celebrate(goal);
+    else toast(`${money(amount)} נכנסו לקופה. חסרים ${money(goal.target - goal.saved)}`);
+  }, FX.reduced() ? 0 : 420);
+  return true;
+}
+
+// Goal reached: the piggy shakes, bursts into coins and notes, then a quiet "well done"
+function celebrate(goal) {
+  const d = $('#sheet-celebrate');
+  $('#celebrate-art').innerHTML = piggySVG(1, { label: 'הקופה מלאה' });
+  $('#celebrate-title').textContent = `הגעת ליעד: ${goal.name}`;
+  $('#celebrate-text').textContent = `${money(goal.saved, { round: true })} נחסכו. זה הזמן ליהנות מזה — ולבחור את המטרה הבאה.`;
+  d.classList.remove('is-burst');
+  openDialog(d);
+  if (FX.reduced()) {
+    d.classList.add('is-burst');
+    return;
+  }
+  setTimeout(() => {
+    d.classList.add('is-burst');
+    FX.burst($('#celebrate-art'));
+    FX.tick(40);
+  }, 900);
 }
 
 function openWish() {
@@ -1647,25 +1775,35 @@ function openCheckIn(period = L.checkInStatus(state, today()).period) {
   const day = String(state.settings.checkInDay).padStart(2, '0');
   const existing = state.snapshots.find((s) => s.period === period);
   const prevSnap = state.snapshots.filter((s) => s.period < period).sort((a, b) => (a.period < b.period ? -1 : 1)).pop();
-  const was = (k) => (prevSnap && prevSnap[k] ? `בפעם הקודמת: ${money(prevSnap[k], { round: true })}` : '');
+  const prevAssets = L.snapshotAssets(prevSnap);
+  const curAssets = existing ? L.snapshotAssets(existing) : null;
   // incomes already logged in the cycle of this check-in
   const logged = L.sumBy(L.incomesInCycle(state, L.cycleFor(`${period}-${day}`, state.settings.cycleDay)));
+  const assetField = (a) => {
+    // prefilled from last month: pension and hishtalmut rarely change, so the check-in stays quick
+    const value = curAssets ? curAssets[a.key] : prevAssets[a.key];
+    const hint = !curAssets && prevAssets[a.key] ? 'מהחודש הקודם, לעדכן אם השתנה' : a.hint;
+    return { name: `a_${a.key}`, label: a.label, type: 'money', value, hint };
+  };
+  const groupFields = (g) => [{ type: 'heading', label: L.ASSET_GROUPS.find((x) => x.key === g).label }, ...L.ASSET_TYPES.filter((a) => a.group === g).map(assetField)];
   openForm({
     title: `צ׳ק־אין · ${L.monthLabelFromKey(period)}`,
-    intro: 'שלושה מספרים, פעם בחודש. מהם פנקס מחשב הוצאות מול הכנסות ואת השווי שלך לאורך זמן.',
+    intro: 'פעם בחודש: כמה נכנס, וכמה יש לך בכל מקום. סכומים מהחודש הקודם כבר ממולאים — מעדכנים רק מה שהשתנה. שדה ריק = 0.',
     submit: existing ? 'שמירה' : 'לשמור את החודש',
     fields: [
       { name: 'income', label: 'כמה כסף נכנס החודש?', type: 'money', required: true, value: existing?.income ?? (logged || prevSnap?.income || state.settings.income || 0), hint: logged ? `רשמת ${money(logged, { round: true })} כהכנסות במחזור הזה` : 'משכורת וכל הכנסה אחרת, נטו' },
-      { name: 'cash', label: 'כמה יש בעו״ש ובמזומן?', type: 'money', value: existing?.cash, hint: was('cash') || 'היתרה בבנק, כולל מזומן' },
-      { name: 'investments', label: 'כמה שוות ההשקעות?', type: 'money', value: existing?.investments, hint: was('investments') || 'תיק מניות, קרן השתלמות, גמל להשקעה' },
-      { name: 'savings', label: 'וכמה בחיסכון?', type: 'money', value: existing?.savings, hint: was('savings') || 'פיקדונות וקופות חיסכון. לא חובה' },
+      ...groupFields('liquid'),
+      ...groupFields('invest'),
+      ...groupFields('longterm'),
     ],
     extra: [
       ...(existing ? [{ label: 'מחיקת הצ׳ק־אין', danger: true, run: () => { state.snapshots = state.snapshots.filter((s) => s !== existing); commit(); toast('הצ׳ק־אין נמחק'); } }] : []),
       { label: 'תזכורת קבועה ביומן', run: () => { addReminder(); return false; } },
     ],
     onSubmit: (v) => {
-      const snap = { id: existing?.id || L.uid(), period, date: existing?.date || `${period}-${day}`, income: v.income, cash: v.cash, investments: v.investments, savings: v.savings, savedAt: Date.now() };
+      const assets = {};
+      for (const a of L.ASSET_TYPES) assets[a.key] = v[`a_${a.key}`] || 0;
+      const snap = { id: existing?.id || L.uid(), period, date: existing?.date || `${period}-${day}`, income: v.income, assets, savedAt: Date.now() };
       state.snapshots = [...state.snapshots.filter((s) => s.period !== period), snap];
       const latest = state.snapshots.reduce((a, b) => (b.period > a.period ? b : a));
       if (latest.period === period) state.settings.income = v.income;
@@ -1679,10 +1817,12 @@ function openCheckIn(period = L.checkInStatus(state, today()).period) {
 }
 
 function maybePromptCheckIn() {
-  if (!state.onboarded) return;
+  if (!state.onboarded || ui.showInstall) return;
   const ci = L.checkInStatus(state, today());
   if (!ci.due || state.settings.checkInPrompted === ci.period) return;
-  if ($$('dialog').some((d) => d.open)) return;
+  if ($$('dialog').some((d) => d.open) || $('.tour')) return;
+  // when the monthly story is waiting, its floating button leads; the story ends with the check-in
+  if (L.pendingStory(state, today())) return;
   state.settings.checkInPrompted = ci.period;
   persist();
   setTimeout(() => openCheckIn(ci.period), 450);
@@ -1899,6 +2039,26 @@ const actions = {
     commit();
   },
   'dismiss-install': () => { state.settings.installHintDismissed = true; commit(); },
+  story: (el) => story.open(L.cycleFor(el.dataset.start, state.settings.cycleDay)),
+  'piggy-switch': () => {
+    const open = state.goals.filter((g) => g.saved < g.target);
+    const curId = piggyGoal()?.id;
+    const i = open.findIndex((g) => g.id === curId);
+    state.settings.piggyGoalId = open[(i + 1) % open.length].id;
+    commit();
+  },
+  share: () => onboard.share(),
+  'install-guide': () => {
+    ui.showInstall = true;
+    ui.settings = false;
+    render();
+    window.scrollTo(0, 0);
+  },
+  'whats-new': () => showWhatsNew(true),
+  tour: () => {
+    go('home');
+    onboard.startTour(() => {});
+  },
   backup: () => backup(),
   restore: () => restorePick(),
   csv: () => shareOrDownload(`pinkas-${today()}.csv`, L.toCSV(state), 'text/csv'),
@@ -1912,6 +2072,24 @@ const actions = {
 };
 
 document.addEventListener('click', (ev) => {
+  const intro = ev.target.closest('[data-intro]');
+  if (intro) {
+    if (intro.dataset.intro === 'next' && ui.introStep < onboard.introLength - 1) ui.introStep++;
+    else ui.introDone = true;
+    render();
+    $('#view [data-intro="next"], #view input, #view .btn')?.focus({ preventScroll: true });
+    return;
+  }
+  const inst = ev.target.closest('[data-install]');
+  if (inst) {
+    onboard.onInstallClick(inst);
+    return;
+  }
+  const inv = ev.target.closest('[data-inv]');
+  if (inv && $('#view').contains(inv)) {
+    investUI.onClick(inv);
+    return;
+  }
   const el = ev.target.closest('[data-act]');
   if (!el) return;
   const fn = actions[el.dataset.act];
@@ -1919,6 +2097,15 @@ document.addEventListener('click', (ev) => {
     ev.preventDefault();
     fn(el);
   }
+});
+
+$('#story-fab').addEventListener('click', () => {
+  FX.tick(10);
+  story.open(L.cycleFor($('#story-fab').dataset.start, state.settings.cycleDay));
+});
+$('#celebrate-new').addEventListener('click', () => {
+  closeDialog($('#sheet-celebrate'));
+  openGoal();
 });
 
 $('#tabs').addEventListener('click', (ev) => {
@@ -1940,6 +2127,7 @@ function openSettings() {
 // Inputs inside views (ledger filters, settings)
 $('#view').addEventListener('input', (ev) => {
   const el = ev.target;
+  if (investUI.onInput(el)) return;
   // update only the results so the iPhone keyboard stays open while typing
   if (el.id === 'lq') {
     ui.ledgerQuery = el.value;
@@ -2038,10 +2226,69 @@ $('#view').addEventListener('submit', (ev) => {
   state.settings.monthlyBudget = ta;
   state.settings.cycleDay = L.clampCycleDay($('#onb-day').value);
   state.onboarded = true;
+  state.settings.lastSeenVersion = VERSION; // new users don't need "what's new"
   commit();
   $('#view').focus();
-  maybePromptCheckIn();
+  // a short guided tour, then the first check-in
+  if (!state.settings.tourDone) {
+    setTimeout(() => onboard.startTour(() => {
+      state.settings.tourDone = true;
+      persist();
+      maybePromptCheckIn();
+    }), FX.reduced() ? 0 : 500);
+  } else maybePromptCheckIn();
 });
+
+/* ---------- what's new (shown once after an update) ---------- */
+function showWhatsNew(force = false) {
+  const entry = CHANGELOG.find((c) => c.v === VERSION) || CHANGELOG[0];
+  // new users get lastSeenVersion at onboarding; an onboarded user without it upgraded from ≤1.3
+  if (!force && (!state.onboarded || state.settings.lastSeenVersion === VERSION || ui.showInstall)) return false;
+  state.settings.lastSeenVersion = VERSION;
+  persist();
+  openForm({
+    title: `מה חדש בפנקס ${entry.v}`,
+    bodyHtml: `<ul class="whats-new">${entry.items.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>`,
+    fields: [],
+    submit: 'מעולה',
+    onSubmit: () => {},
+  });
+  return true;
+}
+
+/* ---------- modules ---------- */
+const api = {
+  state: () => state,
+  esc,
+  money,
+  persist,
+  commit,
+  render,
+  toast,
+  openCheckIn: (p) => openCheckIn(p),
+  openReport: (start) => openReport(start),
+  catName: (id) => catById(id)?.name || '',
+  depositToGoal: (id, amount, slot) => depositToGoal(id, amount, slot),
+  markStorySeen: (cycle) => {
+    state.settings.lastStorySeen = cycle.start;
+    persist();
+    $('#story-fab').hidden = true;
+  },
+  installDone: () => {
+    ui.showInstall = false;
+    ui.fromShare = false;
+    state.settings.installGuideSeen = true;
+    persist();
+    history.replaceState(null, '', location.pathname);
+    render();
+    window.scrollTo(0, 0);
+  },
+};
+const onboard = createOnboarding(api);
+const investUI = createInvest(api);
+const story = createStory(api);
+// story closes -> re-render so the home screen reflects the seen state
+$('#story').addEventListener('close', () => render());
 
 /* ---------- platform ---------- */
 function isIOS() {
@@ -2107,7 +2354,7 @@ const params = new URLSearchParams(location.search);
 if (state.onboarded && (params.get('action') === 'add' || location.hash === '#add')) {
   history.replaceState(null, '', location.pathname);
   openAdd();
-} else {
+} else if (!showWhatsNew()) {
   maybePromptCheckIn();
 }
 
