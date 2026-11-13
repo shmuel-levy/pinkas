@@ -1,6 +1,6 @@
 // Persistence: one versioned JSON blob in localStorage.
 // Installed home-screen apps on iOS keep their storage; we also ask for persistent storage.
-import { uid, clampCycleDay, ASSET_TYPES } from './logic.js';
+import { uid, clampCycleDay, ASSET_TYPES, BANKS } from './logic.js';
 
 export const STORAGE_KEY = 'pinkas.v1';
 export const SCHEMA = 1;
@@ -48,6 +48,8 @@ export function defaultState() {
       lastSeenVersion: '',
       tourDone: false,
       installGuideSeen: false,
+      bank: '',
+      usdRate: null, // { rate, date }
     },
     invest: { status: null, profile: null, broker: null, pension: null },
     categories: defaultCategories(),
@@ -108,6 +110,10 @@ export function normalize(raw) {
   settings.lastSeenVersion = str(s.lastSeenVersion, 12);
   settings.tourDone = !!s.tourDone;
   settings.installGuideSeen = !!s.installGuideSeen;
+  settings.bank = BANKS.some((b) => b.id === s.bank) ? s.bank : '';
+  settings.usdRate = isObj(s.usdRate) && Number.isFinite(s.usdRate.rate) && s.usdRate.rate > 1 && s.usdRate.rate < 10 && isDate(s.usdRate.date)
+    ? { rate: s.usdRate.rate, date: s.usdRate.date }
+    : null;
 
   const snapshots = (Array.isArray(raw.snapshots) ? raw.snapshots : [])
     .filter((x) => isObj(x) && /^\d{4}-\d{2}$/.test(x.period) && isDate(x.date))
@@ -116,12 +122,16 @@ export function normalize(raw) {
       const src = isObj(x.assets) ? x.assets : { checking: x.cash, stocks: x.investments, deposits: x.savings };
       const assets = {};
       for (const t of ASSET_TYPES) assets[t.key] = isInt(src[t.key]) ? src[t.key] : 0;
+      // amounts typed in dollars (cents), kept so editing shows them in $ again
+      const usd = {};
+      if (isObj(x.usd)) for (const t of ASSET_TYPES) if (t.fx && isInt(x.usd[t.key]) && x.usd[t.key] > 0) usd[t.key] = x.usd[t.key];
       return {
         id: String(x.id || uid()),
         period: x.period,
         date: x.date,
         income: isInt(x.income) ? x.income : 0,
         assets,
+        ...(Object.keys(usd).length ? { usd, usdRate: Number.isFinite(x.usdRate) ? x.usdRate : null } : {}),
         savedAt: Number.isFinite(x.savedAt) ? x.savedAt : Date.now(),
       };
     });

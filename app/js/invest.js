@@ -9,7 +9,7 @@
 import { futureValue, formatMoney } from './logic.js';
 
 export const FEES_CHECKED = 'נובמבר 2026';
-export const USD_ILS = 3.65; // approximate, for converting $ minimums; shown in the UI as an assumption
+export const USD_ILS = 3.2; // fallback for converting $ minimums; the app passes the live daily rate (profile.usdIls)
 
 export const FEE_SOURCES = [
   { label: 'israel-investing.com', url: 'https://israel-investing.com/comparison' },
@@ -106,7 +106,7 @@ export const BROKERS = [
  * one buy per monthly deposit (+ one buy for the lump sum), held for the year. No promos.
  * profile: { market: 'ta' | 'us', monthly: agorot, lump: agorot }
  */
-export function yearlyCost(broker, { market, monthly = 0, lump = 0 }) {
+export function yearlyCost(broker, { market, monthly = 0, lump = 0, usdIls = USD_ILS }) {
   const venue = market === 'us' ? broker.us : broker.ta;
   if (!venue) return { available: false };
   const trades = []; // per month: amounts bought (agorot)
@@ -123,7 +123,7 @@ export function yearlyCost(broker, { market, monthly = 0, lump = 0 }) {
     month.forEach((amount, i) => {
       if (market === 'us') {
         if (venue.freeTrades && i < venue.freeTrades) return;
-        c += Math.round(venue.min * USD_ILS * 100); // small monthly buys hit the minimum
+        c += Math.round(venue.min * usdIls * 100); // small monthly buys hit the minimum
       } else {
         c += Math.max(Math.round(venue.min * 100), Math.round(amount * venue.rate));
       }
@@ -147,6 +147,46 @@ export function compareBrokers(profile, { includeBank = true } = {}) {
       return (a.cost.total ?? 0) - (b.cost.total ?? 0);
     });
 }
+
+// Holding a portfolio at a bank: custody is a yearly % of the whole portfolio (commonly 0.4%–0.6%).
+export const BANK_CUSTODY = { low: 0.004, high: 0.006 };
+export function bankCustodyYearly(portfolio) {
+  return { low: Math.round(portfolio * BANK_CUSTODY.low), high: Math.round(portfolio * BANK_CUSTODY.high) };
+}
+
+/* ---------- what you'd actually buy: examples to make it concrete (not recommendations) ---------- */
+export const MARKET_EXAMPLES = {
+  us: {
+    title: 'ישירות בארה״ב',
+    what: 'קונים בדולרים בבורסה האמריקאית. הדוגמה הכי מוכרת: מדד S&P 500 — 500 החברות הגדולות בארה״ב.',
+    items: [
+      { tag: 'SPY', name: 'S&P 500', text: 'קרן הסל הוותיקה על המדד. גם VOO ו־IVV עוקבות אחרי אותו מדד, בדמי ניהול נמוכים יותר.' },
+      { tag: 'QQQ', name: 'נאסד״ק 100', text: '100 חברות הטכנולוגיה והצמיחה הגדולות. תנודתי יותר מ־S&P 500.' },
+      { tag: 'AAPL', name: 'מניה בודדת', text: 'למשל אפל או מיקרוסופט. מניה אחת = סיכון מרוכז בחברה אחת.' },
+    ],
+  },
+  ta: {
+    title: 'בבורסה בתל אביב',
+    what: 'קונים בשקלים, בלי המרת מט״ח. אפשר גם להשקיע במדדים אמריקאיים — דרך קרנות שנסחרות כאן בשקלים.',
+    items: [
+      { tag: 'ת״א 35', name: 'מדד ת״א 35', text: '35 החברות הגדולות בבורסה, כמו לאומי, הפועלים, טבע, אלביט מערכות ונייס. קונים דרך קרן סל שעוקבת אחרי המדד.' },
+      { tag: 'S&P ₪', name: 'S&P 500 בשקלים', text: 'קרנות סל וקרנות מחקות בת״א שעוקבות אחרי S&P 500. אותה חשיפה, בלי לפתוח חשבון דולרי.' },
+      { tag: 'TEVA', name: 'מניה בודדת', text: 'למשל טבע או לאומי. מניה אחת = סיכון מרוכז בחברה אחת.' },
+    ],
+  },
+};
+
+// Short glossary shown in the investments tab
+export const GLOSSARY = [
+  ['מדד', 'סל קבוע של מניות שמייצג שוק. S&P 500 = 500 החברות הגדולות בארה״ב. ת״א 35 = 35 הגדולות בבורסה בתל אביב.'],
+  ['קרן סל (ETF)', 'קרן שנסחרת בבורסה כמו מניה ועוקבת אחרי מדד. יחידה אחת = חשיפה לכל המניות במדד.'],
+  ['קרן מחקה', 'קרן נאמנות שעוקבת אחרי מדד. בישראל זו דרך נפוצה לקנות S&P 500 בשקלים, לרוב בלי עמלת קנייה.'],
+  ['עמלת קנייה', 'מה שבית ההשקעות גובה על כל פעולת קנייה או מכירה. בהפקדות קטנות, ה״מינימום לפעולה״ הוא מה שקובע.'],
+  ['דמי טיפול / משמרת', 'תשלום קבוע על החזקת החשבון: סכום חודשי, או אחוז מהתיק בשנה (בבנקים).'],
+  ['דמי ניהול של קרן', 'אחוז שנתי שהקרן עצמה גובה, מנוכה מהתשואה. בקרנות מדד הם בדרך כלל נמוכים מאוד.'],
+  ['מרווח המרה', 'ההפרש בין השער שבו קונים דולר לשער שבו מוכרים אותו. עלות נסתרת בכל השקעה בדולרים.'],
+  ['מס רווחי הון', '25% על הרווח הריאלי כשמוכרים, בתיק רגיל. בקרן השתלמות (אחרי 6 שנים) ובחלק ממסלולי הגמל — פטור.'],
+];
 
 /* ---------- pension fees (Israel) ---------- */
 // Legal caps: up to 6% of deposits and 0.5% a year of savings. Many people get far better rates.

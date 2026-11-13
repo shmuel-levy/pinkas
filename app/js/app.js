@@ -6,7 +6,7 @@ import { createStory } from './story.js';
 import { createInvest } from './investui.js';
 import { createOnboarding, CHANGELOG, isStandalone as standalone, platform } from './onboard.js';
 
-const VERSION = '1.4.0';
+const VERSION = '1.5.0';
 
 /* ---------- state ---------- */
 let state = S.load();
@@ -845,6 +845,8 @@ function renderSettings() {
         <input id="s-income" class="field" inputmode="decimal" data-money="income" value="${s.income ? s.income / 100 : ''}" placeholder="—"></div>
       <div class="set-row"><label for="s-cur">סימן מטבע</label>
         <input id="s-cur" class="field" data-setting="currency" value="${esc(s.currency)}" maxlength="4"></div>
+      <div class="set-row"><label for="s-bank">הבנק שלך<span class="hint">לשמות השדות בצ׳ק־אין ולהשוואת עמלות</span></label>
+        <select id="s-bank" class="field" data-setting="bank"><option value="">לא נבחר</option>${L.BANKS.map((b) => `<option value="${b.id}" ${s.bank === b.id ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></div>
     </section>
 
     <section aria-labelledby="sd-h" class="set-group">
@@ -1474,7 +1476,23 @@ function openForm({ title, intro = '', bodyHtml = '', fields, submit, onSubmit, 
   $('#form-error').textContent = '';
   $('#form-fields').innerHTML = bodyHtml + fields.map((f) => {
     if (f.type === 'heading') return `<h3 class="form-heading">${esc(f.label)}</h3>`;
+    if (f.type === 'note') return `<p class="form-note" ${f.id ? `id="${f.id}"` : ''}>${esc(f.label)}</p>`;
     const id = `f-${f.name}`;
+    if (f.type === 'money' && f.fx) {
+      // amount in ₪ or $ — dollars convert to shekels by the daily rate
+      const usd = f.cur === 'USD';
+      const shown = usd ? f.usdValue : f.value;
+      return `<div class="form-field"><label for="${id}">${esc(f.label)}</label>
+        <div class="fx-row">
+          <div class="money-field"><input class="field" id="${id}" name="${f.name}" inputmode="decimal" autocomplete="off" data-cur="${usd ? 'USD' : 'ILS'}" value="${shown ? shown / 100 : ''}" aria-describedby="${id}-fx${f.hint ? ` ${id}-h` : ''}"><span class="cur" aria-hidden="true">${usd ? '$' : esc(cur())}</span></div>
+          <div class="fx-toggle" role="group" aria-label="מטבע: ${esc(f.label)}">
+            <button type="button" data-fx="${id}" data-c="ILS" aria-pressed="${!usd}">₪</button>
+            <button type="button" data-fx="${id}" data-c="USD" aria-pressed="${usd}">$</button>
+          </div>
+        </div>
+        <span class="hint fx-hint" id="${id}-fx" aria-live="polite">${usd && shown ? fxHint(shown) : ''}</span>
+        ${f.hint ? `<span class="hint" id="${id}-h">${esc(f.hint)}</span>` : ''}</div>`;
+    }
     const hint = f.hint ? `<span class="hint" id="${id}-h">${esc(f.hint)}</span>` : '';
     const desc = f.hint ? `aria-describedby="${id}-h"` : '';
     if (f.type === 'check') {
@@ -1499,7 +1517,7 @@ function openForm({ title, intro = '', bodyHtml = '', fields, submit, onSubmit, 
     const vals = {};
     $$('#form-fields [aria-invalid]').forEach((x) => x.removeAttribute('aria-invalid'));
     for (const f of fields) {
-      if (f.type === 'heading') continue;
+      if (f.type === 'heading' || f.type === 'note') continue;
       const el = $(`#f-${f.name}`);
       const name = `״${f.label.replace(/[?:]$/, '')}״`;
       if (f.type === 'check') vals[f.name] = el.checked;
@@ -1508,7 +1526,10 @@ function openForm({ title, intro = '', bodyHtml = '', fields, submit, onSubmit, 
         const a = raw ? L.parseAmount(raw) : 0;
         if (a === null) return fail(`${name} צריך להיות מספר, למשל 45 או 12.50`, el);
         if (f.required && !a) return fail(`חסר סכום ב${name}`, el);
-        vals[f.name] = a;
+        if (el.dataset.cur === 'USD') {
+          vals[`${f.name}__usd`] = a; // cents
+          vals[f.name] = L.usdToIls(a, usdRate());
+        } else vals[f.name] = a;
       } else {
         vals[f.name] = el.value.trim();
         if (f.required && !vals[f.name]) return fail(`צריך למלא את ${name}`, el);
@@ -1535,6 +1556,82 @@ function fail(msg, el) {
 $('#form-generic').addEventListener('submit', (ev) => {
   ev.preventDefault();
   formSubmit?.();
+});
+
+/* ---------- dollars ---------- */
+function usdRate() {
+  return state.settings.usdRate?.rate || L.DEFAULT_USD_ILS;
+}
+function fxHint(cents) {
+  const r = state.settings.usdRate;
+  return `≈ ${money(L.usdToIls(cents, usdRate()), { round: true })} · שער ${usdRate().toFixed(3)}${r ? ` (${L.fromISO(r.date).getDate()}/${L.fromISO(r.date).getMonth() + 1})` : ' (משוער)'}`;
+}
+// The daily ECB rate (via frankfurter), with a second free source as backup. Only the rate is requested — no personal data.
+let ratePromise = null;
+function ensureUsdRate() {
+  if (state.settings.usdRate?.date === today()) return Promise.resolve(usdRate());
+  if (ratePromise) return ratePromise;
+  const tryFetch = async (url, pick) => {
+    const res = await fetch(url, { cache: 'no-store' });
+    const rate = pick(await res.json());
+    if (!(rate > 1 && rate < 10)) throw new Error('bad rate');
+    return rate;
+  };
+  ratePromise = tryFetch('https://api.frankfurter.dev/v1/latest?base=USD&symbols=ILS', (j) => j?.rates?.ILS)
+    .catch(() => tryFetch('https://open.er-api.com/v6/latest/USD', (j) => j?.rates?.ILS))
+    .then((rate) => {
+      state.settings.usdRate = { rate: Math.round(rate * 10000) / 10000, date: today() };
+      persist();
+      return rate;
+    })
+    .catch(() => usdRate())
+    .finally(() => {
+      ratePromise = null;
+      refreshFxHints();
+    });
+  return ratePromise;
+}
+function refreshFxHints() {
+  $$('#form-fields input[data-cur="USD"]').forEach((el) => {
+    const a = el.value.trim() ? L.parseAmount(el.value) : 0;
+    $(`#${el.id}-fx`).textContent = a ? fxHint(a) : '';
+  });
+  const note = $('#fx-rate-note');
+  if (note) note.textContent = rateNote();
+}
+function rateNote() {
+  const r = state.settings.usdRate;
+  return `סכומים בדולרים מומרים לשקלים לפי שער הדולר היומי${r ? `: ${r.rate.toFixed(3)} ₪ לדולר (${L.fromISO(r.date).getDate()}/${L.fromISO(r.date).getMonth() + 1})` : ` (כרגע משוער: ${L.DEFAULT_USD_ILS} ₪)`}.`;
+}
+$('#form-fields').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-fx]');
+  if (!b) return;
+  const input = $(`#${b.dataset.fx}`);
+  const to = b.dataset.c;
+  if (input.dataset.cur === to) return;
+  // convert what's typed so the value stays the same money
+  const a = input.value.trim() ? L.parseAmount(input.value) : 0;
+  if (a) {
+    const conv = to === 'USD' ? Math.round(a / usdRate()) : L.usdToIls(a, usdRate());
+    input.value = (conv / 100).toFixed(2).replace(/\.00$/, '');
+  }
+  input.dataset.cur = to;
+  input.parentElement.querySelector('.cur').textContent = to === 'USD' ? '$' : cur();
+  b.parentElement.querySelectorAll('[data-fx]').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.c === to)));
+  refreshFxHints();
+  input.focus();
+});
+$('#form-fields').addEventListener('input', (ev) => {
+  if (ev.target.dataset?.cur === 'USD') refreshFxHints();
+});
+// check-in: picking a bank renames the bank fields live ("עו״ש באוצר החייל")
+$('#form-fields').addEventListener('change', (ev) => {
+  if (ev.target.id !== 'f-bank') return;
+  const b = L.bankName(ev.target.value);
+  const lc = $('label[for="f-a_checking"]');
+  const li = $('label[for="f-a_bankInvest"]');
+  if (lc) lc.textContent = b ? `עו״ש ב${b}` : 'עו״ש';
+  if (li) li.textContent = b ? `השקעות דרך ${b}` : 'השקעות דרך הבנק';
 });
 
 const catOptions = () => activeCats().map((c) => [c.id, c.name]);
@@ -1779,13 +1876,23 @@ function openCheckIn(period = L.checkInStatus(state, today()).period) {
   const curAssets = existing ? L.snapshotAssets(existing) : null;
   // incomes already logged in the cycle of this check-in
   const logged = L.sumBy(L.incomesInCycle(state, L.cycleFor(`${period}-${day}`, state.settings.cycleDay)));
+  const bank = L.bankName(state.settings.bank);
+  const srcUsd = (existing ? existing.usd : prevSnap?.usd) || {};
+  const assetLabel = (a, b = bank) => (a.key === 'checking' && b ? `עו״ש ב${b}` : a.key === 'bankInvest' && b ? `השקעות דרך ${b}` : a.label);
   const assetField = (a) => {
     // prefilled from last month: pension and hishtalmut rarely change, so the check-in stays quick
     const value = curAssets ? curAssets[a.key] : prevAssets[a.key];
     const hint = !curAssets && prevAssets[a.key] ? 'מהחודש הקודם, לעדכן אם השתנה' : a.hint;
-    return { name: `a_${a.key}`, label: a.label, type: 'money', value, hint };
+    const usd = a.fx && srcUsd[a.key];
+    return { name: `a_${a.key}`, label: assetLabel(a), type: 'money', value, hint, fx: a.fx, cur: usd ? 'USD' : 'ILS', usdValue: usd || 0 };
   };
-  const groupFields = (g) => [{ type: 'heading', label: L.ASSET_GROUPS.find((x) => x.key === g).label }, ...L.ASSET_TYPES.filter((a) => a.group === g).map(assetField)];
+  const groupFields = (g) => [
+    { type: 'heading', label: L.ASSET_GROUPS.find((x) => x.key === g).label },
+    ...(g === 'liquid' ? [{ name: 'bank', label: 'באיזה בנק החשבון שלך?', type: 'select', value: state.settings.bank, options: [['', 'לא לבחור'], ...L.BANKS.map((b) => [b.id, b.name])] }] : []),
+    ...(g === 'invest' ? [{ type: 'note', id: 'fx-rate-note', label: `יש השקעות בדולרים? לוחצים $ ליד השדה. ${rateNote()}` }] : []),
+    ...L.ASSET_TYPES.filter((a) => a.group === g).map(assetField),
+  ];
+  ensureUsdRate();
   openForm({
     title: `צ׳ק־אין · ${L.monthLabelFromKey(period)}`,
     intro: 'פעם בחודש: כמה נכנס, וכמה יש לך בכל מקום. סכומים מהחודש הקודם כבר ממולאים — מעדכנים רק מה שהשתנה. שדה ריק = 0.',
@@ -1802,8 +1909,14 @@ function openCheckIn(period = L.checkInStatus(state, today()).period) {
     ],
     onSubmit: (v) => {
       const assets = {};
-      for (const a of L.ASSET_TYPES) assets[a.key] = v[`a_${a.key}`] || 0;
+      const usd = {};
+      for (const a of L.ASSET_TYPES) {
+        assets[a.key] = v[`a_${a.key}`] || 0;
+        if (v[`a_${a.key}__usd`]) usd[a.key] = v[`a_${a.key}__usd`];
+      }
+      state.settings.bank = v.bank || '';
       const snap = { id: existing?.id || L.uid(), period, date: existing?.date || `${period}-${day}`, income: v.income, assets, savedAt: Date.now() };
+      if (Object.keys(usd).length) Object.assign(snap, { usd, usdRate: usdRate() });
       state.snapshots = [...state.snapshots.filter((s) => s.period !== period), snap];
       const latest = state.snapshots.reduce((a, b) => (b.period > a.period ? b : a));
       if (latest.period === period) state.settings.income = v.income;
@@ -2251,9 +2364,22 @@ function showWhatsNew(force = false) {
     bodyHtml: `<ul class="whats-new">${entry.items.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>`,
     fields: [],
     submit: 'מעולה',
-    onSubmit: () => {},
+    onSubmit: () => {
+      // existing users who never had the tour get it once, right after "what's new"
+      if (!state.settings.tourDone) setTimeout(runTour, 350);
+    },
   });
   return true;
+}
+
+function runTour() {
+  if ($('.tour') || !state.onboarded || ui.showInstall) return;
+  go('home');
+  onboard.startTour(() => {
+    state.settings.tourDone = true;
+    persist();
+    maybePromptCheckIn();
+  });
 }
 
 /* ---------- modules ---------- */
@@ -2268,6 +2394,8 @@ const api = {
   openCheckIn: (p) => openCheckIn(p),
   openReport: (start) => openReport(start),
   catName: (id) => catById(id)?.name || '',
+  usdRate: () => usdRate(),
+  ensureUsdRate: () => ensureUsdRate(),
   depositToGoal: (id, amount, slot) => depositToGoal(id, amount, slot),
   markStorySeen: (cycle) => {
     state.settings.lastStorySeen = cycle.start;
@@ -2355,7 +2483,8 @@ if (state.onboarded && (params.get('action') === 'add' || location.hash === '#ad
   history.replaceState(null, '', location.pathname);
   openAdd();
 } else if (!showWhatsNew()) {
-  maybePromptCheckIn();
+  if (state.onboarded && !state.settings.tourDone && !ui.showInstall) setTimeout(runTour, 600);
+  else maybePromptCheckIn();
 }
 
 // expose for debugging in the console only

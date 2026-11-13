@@ -4,6 +4,6 @@
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
-    "test": "node --test tests/logic.test.mjs tests/features.test.mjs tests/spread.test.mjs tests/standing.test.mjs tests/story-invest.test.mjs"
+    "test": "node --test tests/logic.test.mjs tests/features.test.mjs tests/spread.test.mjs tests/standing.test.mjs tests/story-invest.test.mjs tests/bank-fx.test.mjs"
   }
 }

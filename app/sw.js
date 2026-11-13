@@ -1,6 +1,6 @@
 // פנקס service worker: the whole app works offline.
 // Bump VERSION whenever any app file changes so phones pick up the update.
-const VERSION = 'pinkas-1.4.0';
+const VERSION = 'pinkas-1.5.0';
 const SHELL = [
   './',
   './index.html',

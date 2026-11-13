@@ -43,7 +43,50 @@ export function createInvest(api) {
         <p class="hero-sub">לפי התשובה פנקס יתאים את העמוד: השוואת עמלות בין בתי ההשקעות, בדיקת דמי ניהול בפנסיה, ומה כדאי לדעת לפני שמתחילים.</p>
       </section>
       <section>${optionList('המצב שלך', STATUS, inv().status)}</section>
+      <section class="section-gap">
+        <div class="sec-head"><h2 class="sec-title">מה יש כאן</h2></div>
+        <ol class="inv-steps">
+          <li><strong>4–5 שאלות קצרות</strong><span>לכמה זמן, בשביל מה, כמה כסף, ואיפה לקנות.</span></li>
+          <li><strong>מה חשוב לדעת</strong><span>לפי התשובות שלך: כרית ביטחון, הטבות מס בישראל, וטווח ההשקעה.</span></li>
+          <li><strong>כמה זה יעלה לך</strong><span>השוואת עמלות בין בתי ההשקעות לפי הסכומים שלך.</span></li>
+          <li><strong>הפנסיה שלך</strong><span>בדיקה כמה דמי הניהול עולים לך לאורך השנים.</span></li>
+        </ol>
+      </section>
+      ${glossary()}
       ${disclaimer()}`;
+  }
+
+  const WHY = {
+    broker: 'כדי להשוות את העלות אצלך מול האפשרויות האחרות.',
+    horizon: 'ככל שהזמן ארוך יותר, יש יותר זמן להתאושש מירידות בשוק — וזה משנה מה מתאים.',
+    goal: 'כרית ביטחון ודירה צריכות כסף זמין. פרישה יכולה לחכות שנים.',
+    money: 'העמלות תלויות בגודל ההפקדות. אפשר גם 0 בחד־פעמי ולהתחיל רק בהפקדה חודשית.',
+    market: 'זה קובע באיזה מטבע קונים ואילו בתי השקעות בכלל מציעים את זה.',
+  };
+
+  function marketCards(current) {
+    const card = (key) => {
+      const ex = I.MARKET_EXAMPLES[key];
+      return `<button type="button" class="inv-option inv-market" role="radio" aria-checked="${current === key}" data-inv="pick" data-value="${key}">
+        <span class="inv-mk-top"><span class="inv-mk-flag" aria-hidden="true">${key === 'us' ? 'USD' : 'ILS'}</span><span class="inv-option-l">${esc(ex.title)}</span></span>
+        <span class="inv-option-s">${esc(ex.what)}</span>
+        <span class="inv-mk-list">${ex.items.map((it) => `<span class="inv-mk-item"><span class="ticker">${esc(it.tag)}</span><span><strong>${esc(it.name)}</strong> — ${esc(it.text)}</span></span>`).join('')}</span>
+      </button>`;
+    };
+    return `<div class="inv-options" role="radiogroup" aria-label="איפה לקנות">
+      ${card('us')}${card('ta')}
+      <button type="button" class="inv-option" role="radio" aria-checked="${current === 'unsure'}" data-inv="pick" data-value="unsure">
+        <span class="inv-option-l">עוד לא יודע/ת</span><span class="inv-option-s">נחשב לפי תל אביב — שם אפשר גם לקנות S&P 500 בשקלים.</span>
+      </button>
+    </div>
+    <p class="small muted">הדוגמאות נועדו להבין במה מדובר. הן לא המלצה לקנות נייר ערך מסוים.</p>`;
+  }
+
+  function glossary() {
+    return `<section class="section-gap" aria-labelledby="gl-h">
+      <div class="sec-head"><h2 class="sec-title" id="gl-h">מילון קצר</h2></div>
+      <div class="glossary">${I.GLOSSARY.map(([t, d]) => `<details><summary>${esc(t)}</summary><p>${esc(d)}</p></details>`).join('')}</div>
+    </section>`;
   }
 
   function renderQuestion() {
@@ -54,7 +97,8 @@ export function createInvest(api) {
     let title = '';
     if (key === 'broker') {
       title = 'איפה התיק שלך היום?';
-      body = optionList('בית ההשקעות', [...I.BROKERS.filter((b) => b.kind !== 'bank').map((b) => ({ key: b.id, label: b.name })), { key: 'bank', label: 'בבנק' }, { key: 'other', label: 'אחר' }], d.broker);
+      const myBank = L.bankName(api.state().settings.bank);
+      body = optionList('בית ההשקעות', [...I.BROKERS.filter((b) => b.kind !== 'bank').map((b) => ({ key: b.id, label: b.name })), { key: 'bank', label: myBank ? `בבנק — ${myBank}` : 'בבנק' }, { key: 'other', label: 'אחר' }], d.broker);
     } else if (key === 'horizon') {
       title = 'לכמה זמן הכסף יכול להיות מושקע?';
       body = optionList('טווח ההשקעה', I.HORIZONS, d.horizon);
@@ -72,7 +116,7 @@ export function createInvest(api) {
         <button type="button" class="btn btn-primary inv-next" data-inv="money-next">המשך</button>`;
     } else if (key === 'market') {
       title = 'איפה הכי מעניין אותך לקנות?';
-      body = optionList('איפה', MARKETS, d.market);
+      body = marketCards(d.market);
     }
     return `<section class="inv-q">
         <div class="inv-progress" role="progressbar" aria-valuemin="1" aria-valuemax="${list.length}" aria-valuenow="${q.step + 1}" aria-label="שאלה ${q.step + 1} מתוך ${list.length}">
@@ -80,8 +124,12 @@ export function createInvest(api) {
         </div>
         <p class="eyebrow">שאלה ${q.step + 1} מתוך ${list.length}</p>
         <h2 class="inv-q-title">${esc(title)}</h2>
+        <p class="inv-why"><span>למה שואלים?</span> ${esc(WHY[key] || '')}</p>
         ${body}
-        <button type="button" class="link" data-inv="back">${q.step ? 'חזרה לשאלה הקודמת' : 'חזרה'}</button>
+        <div class="inv-q-foot">
+          <button type="button" class="link" data-inv="back">${q.step ? 'חזרה לשאלה הקודמת' : 'חזרה'}</button>
+          <button type="button" class="link small" data-inv="wipe">איפוס הכל</button>
+        </div>
       </section>`;
   }
 
@@ -117,11 +165,13 @@ export function createInvest(api) {
       </ul>
       <div class="inv-hero-actions">
         <button type="button" class="link link-on-dark" data-inv="redo">לשנות תשובות</button>
-        <button type="button" class="link link-on-dark" data-inv="reset">להתחיל מחדש</button>
+        <button type="button" class="link link-on-dark" data-inv="reset">לשנות מצב</button>
+        <button type="button" class="link link-on-dark" data-inv="wipe">איפוס הכל</button>
       </div>
     </section>`);
 
     if (inv().status === 'investing') parts.push(renderPortfolio());
+    parts.push(renderBank());
 
     parts.push(`<section aria-labelledby="inv-notes-h">
       <div class="sec-head"><h2 class="sec-title" id="inv-notes-h">מה חשוב לדעת</h2></div>
@@ -142,8 +192,36 @@ export function createInvest(api) {
 
     if (plan.selfDirected || inv().status === 'investing') parts.push(renderBrokers(p));
     parts.push(renderPension());
+    parts.push(glossary());
     parts.push(disclaimer());
     return parts.join('');
+  }
+
+  // Your bank: checking balance + a portfolio held at the bank (and what custody costs there)
+  function renderBank() {
+    const st = api.state();
+    const series = L.netWorthSeries(st.snapshots);
+    const last = series[series.length - 1];
+    const name = L.bankName(st.settings.bank);
+    if (!name && !(last && last.assets.bankInvest)) {
+      return `<section class="section-gap inv-bank" aria-labelledby="inv-bank-h">
+        <div class="sec-head"><h2 class="sec-title" id="inv-bank-h">הבנק שלך</h2></div>
+        <p class="block-p">באיזה בנק החשבון, כמה בעו״ש וכמה מושקע דרך הבנק — מזינים בצ׳ק־אין החודשי, ופנקס יראה כאן כמה זה עולה לך.</p>
+        <button type="button" class="btn btn-line btn-small" data-inv="checkin">לצ׳ק־אין</button>
+      </section>`;
+    }
+    const checking = last ? last.assets.checking : 0;
+    const bankInv = last ? last.assets.bankInvest : 0;
+    const cost = I.bankCustodyYearly(bankInv);
+    return `<section class="section-gap inv-bank" aria-labelledby="inv-bank-h">
+      <div class="sec-head"><h2 class="sec-title" id="inv-bank-h">הבנק שלך${name ? ` · ${esc(name)}` : ''}</h2><button type="button" class="link" data-inv="checkin">עדכון</button></div>
+      <ul class="kv">
+        <li><span>עו״ש</span>${m(checking, { round: true })}</li>
+        <li><span>השקעות דרך הבנק</span>${bankInv ? m(bankInv, { round: true }) : '<span class="muted">אין</span>'}</li>
+      </ul>
+      ${bankInv ? `<p class="callout">על תיק של ${m(bankInv, { round: true })} בבנק, דמי המשמרת הם בדרך כלל ${I.BANK_CUSTODY.low * 100}%–${I.BANK_CUSTODY.high * 100}% בשנה — כ־<strong>${m(cost.low, { round: true })}–${m(cost.high, { round: true })} בשנה</strong>, עוד לפני עמלות קנייה. ברוב בתי ההשקעות בטבלה למטה אין דמי משמרת באחוזים. אפשר גם לבקש מהבנק הנחה — זה עובד לא מעט.</p>` : ''}
+      ${!bankInv && checking > 0 && last ? `<p class="block-p">כסף שיושב בעו״ש לא צובר ריבית ברוב הבנקים. מה שמעבר לכרית הביטחון יכול לעבוד — בפיקדון, בקרן כספית, או בהשקעה לטווח ארוך.</p>` : ''}
+    </section>`;
   }
 
   function renderPortfolio() {
@@ -155,14 +233,15 @@ export function createInvest(api) {
     const rows = L.ASSET_TYPES.filter((a) => a.group !== 'liquid' && last.assets[a.key]);
     return `<section aria-labelledby="inv-pf-h">
       <div class="sec-head"><h2 class="sec-title" id="inv-pf-h">התיק שלך</h2><button type="button" class="link" data-inv="checkin">עדכון</button></div>
-      ${rows.length ? `<ul class="kv">${rows.map((a) => `<li><span>${esc(a.label)}</span>${m(last.assets[a.key], { round: true })}</li>`).join('')}
+      ${rows.length ? `<ul class="kv">${rows.map((a) => `<li><span>${esc(a.label)}${last.usd?.[a.key] ? ` <span class="small muted">($${(last.usd[a.key] / 100).toLocaleString('en-US')})</span>` : ''}</span>${m(last.assets[a.key], { round: true })}</li>`).join('')}
         <li><strong>סה״כ השקעות וחיסכון לטווח ארוך</strong><strong>${m(last.invest + last.longterm, { round: true })}</strong></li></ul>`
       : '<p class="block-p">בצ׳ק־אין האחרון לא הוזנו השקעות. אפשר לעדכן שם.</p>'}
     </section>`;
   }
 
   function renderBrokers(p) {
-    const profile = { market: p.market, monthly: p.monthly, lump: p.lump };
+    const rate = api.usdRate();
+    const profile = { market: p.market, monthly: p.monthly, lump: p.lump, usdIls: rate };
     const list = I.compareBrokers(profile);
     const avail = list.filter((x) => x.cost.available);
     const cheapest = avail[0];
@@ -182,6 +261,7 @@ export function createInvest(api) {
     }
     return `<section class="section-gap" aria-labelledby="inv-br-h">
       <div class="sec-head"><h2 class="sec-title" id="inv-br-h">השוואת בתי השקעות</h2><span class="small muted">מסחר ב${venue}</span></div>
+      <p class="block-p">איך קוראים את זה: המספר הגדול בכל כרטיס הוא כמה זה יעלה לך <strong>בשנה</strong> — עמלות קנייה על כל הפקדה ועוד דמי טיפול. מסודר מהזול ליקר, לפי הסכומים שענית בשאלון.</p>
       ${summary}
       <ol class="brokers">${list.map((x, i) => {
         const b = x.broker;
@@ -204,7 +284,7 @@ export function createInvest(api) {
           ${b.promo || b.note ? `<p class="broker-note">${esc([b.promo, b.note].filter(Boolean).join('. '))}</p>` : ''}
         </li>`;
       }).join('')}</ol>
-      <p class="small muted">העלות השנתית היא הערכה: קנייה אחת בכל הפקדה, בלי מבצעי הצטרפות, ובלי מרווח המרת מט״ח${p.market === 'us' ? `. דולר מחושב לפי ₪${I.USD_ILS}` : ''}. התעריפים נבדקו ב${I.FEES_CHECKED} מול ${I.FEE_SOURCES.map((s) => `<a href="${s.url}" target="_blank" rel="noopener">${esc(s.label)}</a>`).join(', ')}. המקורות לא תמיד מסכימים, ובמקרה כזה החישוב לוקח את הערך היקר. לפני שפותחים חשבון — לבדוק בתעריפון הרשמי.</p>
+      <p class="small muted">העלות השנתית היא הערכה: קנייה אחת בכל הפקדה, בלי מבצעי הצטרפות, ובלי מרווח המרת מט״ח${p.market === 'us' ? `. דולר מחושב לפי שער הדולר היומי: ₪${rate.toFixed(2)}` : ''}. התעריפים נבדקו ב${I.FEES_CHECKED} מול ${I.FEE_SOURCES.map((s) => `<a href="${s.url}" target="_blank" rel="noopener">${esc(s.label)}</a>`).join(', ')}. המקורות לא תמיד מסכימים, ובמקרה כזה החישוב לוקח את הערך היקר. לפני שפותחים חשבון — לבדוק בתעריפון הרשמי.</p>
     </section>`;
   }
 
@@ -252,6 +332,11 @@ export function createInvest(api) {
   }
 
   function render() {
+    // keep the dollar rate fresh; re-render only if it actually changed (no loops)
+    const before = api.usdRate();
+    api.ensureUsdRate().then((r) => {
+      if (Math.abs(r - before) > 0.0001 && document.querySelector('#inv-br-h')) api.render();
+    });
     if (!inv().status) return renderStatus();
     if (!inv().profile || q.active) {
       q.active = true;
@@ -314,6 +399,16 @@ export function createInvest(api) {
       return rerender();
     }
     if (a === 'checkin') api.openCheckIn();
+    if (a === 'wipe') {
+      if (!confirm('לאפס את כל נתוני ההשקעות? התשובות לשאלון, בית ההשקעות ונתוני הפנסיה יימחקו. הסכומים בצ׳ק־אין נשארים.')) return;
+      st.invest = { status: null, profile: null, broker: null, pension: null };
+      q.step = 0;
+      q.draft = {};
+      q.active = false;
+      api.persist();
+      rerender();
+      api.toast('נתוני ההשקעות אופסו');
+    }
   }
 
   function readMoney(sel) {

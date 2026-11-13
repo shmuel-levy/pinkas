@@ -523,13 +523,38 @@ export const ASSET_TYPES = [
   { key: 'checking', label: 'עו״ש', group: 'liquid', hint: 'היתרה בחשבון הבנק' },
   { key: 'cash', label: 'מזומן', group: 'liquid', hint: 'בארנק ובבית' },
   { key: 'deposits', label: 'פיקדונות וחסכונות', group: 'liquid', hint: 'פיקדון בבנק, תוכנית חיסכון' },
-  { key: 'stocks', label: 'תיק השקעות', group: 'invest', hint: 'מניות, קרנות סל, קרנות נאמנות' },
+  { key: 'stocks', label: 'תיק השקעות בבית השקעות', group: 'invest', hint: 'מניות, קרנות סל, קרנות נאמנות', fx: true },
+  { key: 'bankInvest', label: 'השקעות דרך הבנק', group: 'invest', hint: 'תיק ניירות ערך בבנק, אם יש', fx: true },
   { key: 'gemel', label: 'קופת גמל להשקעה', group: 'invest', hint: '' },
-  { key: 'crypto', label: 'קריפטו', group: 'invest', hint: '' },
+  { key: 'crypto', label: 'קריפטו', group: 'invest', hint: '', fx: true },
   { key: 'hishtalmut', label: 'קרן השתלמות', group: 'longterm', hint: 'לפי הדוח האחרון' },
   { key: 'pension', label: 'פנסיה וביטוח מנהלים', group: 'longterm', hint: 'הסכום שנצבר' },
-  { key: 'other', label: 'אחר', group: 'invest', hint: '' },
+  { key: 'other', label: 'אחר', group: 'invest', hint: '', fx: true },
 ];
+
+export const BANKS = [
+  { id: 'leumi', name: 'לאומי' },
+  { id: 'hapoalim', name: 'הפועלים' },
+  { id: 'discount', name: 'דיסקונט' },
+  { id: 'mizrahi', name: 'מזרחי טפחות' },
+  { id: 'fibi', name: 'הבינלאומי' },
+  { id: 'otsar', name: 'אוצר החייל' },
+  { id: 'mercantile', name: 'מרכנתיל' },
+  { id: 'yahav', name: 'יהב' },
+  { id: 'massad', name: 'מסד' },
+  { id: 'jerusalem', name: 'בנק ירושלים' },
+  { id: 'onezero', name: 'וואן זירו' },
+  { id: 'pagi', name: 'פאגי' },
+  { id: 'other', name: 'בנק אחר' },
+];
+export const bankName = (id) => BANKS.find((b) => b.id === id)?.name || '';
+
+/* ---------- dollars ---------- */
+export const DEFAULT_USD_ILS = 3.2; // fallback only; the app fetches the daily ECB rate
+// cents (USD) -> agorot (ILS)
+export function usdToIls(cents, rate) {
+  return Math.round(cents * rate);
+}
 export const ASSET_GROUPS = [
   { key: 'liquid', label: 'נזיל', hint: 'עו״ש, מזומן ופיקדונות' },
   { key: 'invest', label: 'השקעות', hint: 'תיק, גמל להשקעה, קריפטו' },
@@ -558,7 +583,7 @@ export function netWorth(s) {
 export function netWorthSeries(snapshots) {
   return [...(snapshots || [])]
     .sort((a, b) => (a.period < b.period ? -1 : 1))
-    .map((s) => ({ period: s.period, total: netWorth(s), ...groupTotals(s), assets: snapshotAssets(s), income: s.income || 0 }));
+    .map((s) => ({ period: s.period, total: netWorth(s), ...groupTotals(s), assets: snapshotAssets(s), usd: s.usd || null, income: s.income || 0 }));
 }
 
 /* ---------- growth math ---------- */
