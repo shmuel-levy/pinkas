@@ -1,0 +1,46 @@
+@use 'tokens';
+
+/* =====================================================================
+   1.5 — dollars, bank, clearer investments
+   ===================================================================== */
+.fx-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: stretch; }
+.fx-toggle { display: inline-flex; border: 1px solid var(--rule); border-radius: 10px; padding: 3px; gap: 2px; }
+.fx-toggle button { min-width: 40px; min-height: 40px; border: 0; border-radius: 7px; background: none; font-weight: 700; font-size: 1rem; color: var(--ink-2); }
+.fx-toggle button[aria-pressed='true'] { background: var(--money); color: var(--money-ink); }
+.fx-hint { color: var(--good) !important; font-weight: 500; }
+.fx-hint:empty { display: none !important; }
+.form-note { font-size: 0.85rem; color: var(--ink-2); background: var(--paper-2); border-radius: 10px; padding: 10px 12px; margin: 10px 0 4px; }
+
+.inv-why { font-size: 0.9rem; color: var(--ink-2); margin: -6px 0 14px; padding: 10px 12px; border-radius: 10px; background: var(--paper-2); }
+.inv-why span { font-weight: 700; color: var(--gold-ink); }
+.inv-q-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.inv-market { gap: 6px; padding: 16px; }
+.inv-mk-top { display: flex; align-items: center; gap: 10px; }
+.inv-mk-flag {
+  font-size: 0.65rem; font-weight: 700; letter-spacing: 0.06em;
+  padding: 3px 7px; border-radius: 6px;
+  background: var(--vault); color: var(--vault-gold);
+  font-variant-numeric: tabular-nums;
+}
+.inv-mk-list { display: grid; gap: 8px; margin-top: 8px; padding-top: 10px; border-top: 1px dashed var(--rule); }
+.inv-mk-item { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; font-size: 0.85rem; color: var(--ink-2); line-height: 1.45; }
+.inv-mk-item strong { color: var(--ink); }
+.ticker {
+  direction: ltr; unicode-bidi: isolate;
+  min-width: 52px; text-align: center;
+  font-weight: 700; font-size: 0.75rem; letter-spacing: 0.03em;
+  padding: 4px 6px; border-radius: 6px;
+  border: 1px solid var(--gold); color: var(--gold-ink); background: var(--paper);
+  font-variant-numeric: tabular-nums;
+}
+.inv-market[aria-checked='true'] .ticker { background: var(--paper-2); }
+.inv-steps { list-style: none; counter-reset: st; padding: 0; margin: 8px 0 0; display: grid; gap: 4px; }
+.inv-steps li { counter-increment: st; display: grid; grid-template-columns: 2em 1fr; padding: 10px 0; border-bottom: 1px solid var(--rule-soft); }
+.inv-steps li::before { content: counter(st); grid-row: 1 / span 2; font-family: var(--f-display); font-weight: 900; font-size: 1.3rem; color: var(--gold-ink); line-height: 1.1; }
+.inv-steps span { font-size: 0.9rem; color: var(--ink-2); }
+.glossary { display: grid; gap: 6px; margin-top: 8px; }
+.glossary details { border: 1px solid var(--rule-soft); border-radius: 10px; padding: 0 12px; background: var(--paper); }
+.glossary summary { cursor: pointer; font-weight: 700; min-height: 44px; display: flex; align-items: center; }
+.glossary summary::marker { color: var(--gold); }
+.glossary p { font-size: 0.9rem; color: var(--ink-2); padding-bottom: 12px; }
+.inv-hero-actions { flex-wrap: wrap; column-gap: 18px; }

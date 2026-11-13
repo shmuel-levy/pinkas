@@ -1,6 +1,6 @@
 # Draws the פנקס app icon (a banknote with a gold seal on money green) at every size iOS/Android need.
 Add-Type -AssemblyName System.Drawing
-$out = Join-Path $PSScriptRoot '..\app\icons'
+$out = Join-Path $PSScriptRoot '..\public\icons'
 New-Item -ItemType Directory -Force $out | Out-Null
 
 function Hex($h, $a = 255) {

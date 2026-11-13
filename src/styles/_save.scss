@@ -1,0 +1,55 @@
+@use 'tokens';
+
+/* ---------- net worth ---------- */
+.nw-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: -8px; }
+.nw-num { font-family: var(--f-display); font-weight: 900; font-size: clamp(2.6rem, 13vw, 3.4rem); line-height: 1; margin: 2px 0 6px; }
+.nw-change { font-size: 0.9rem; font-weight: 500; }
+.nw-change.up { color: #9FE0BB; }
+.nw-change.down { color: var(--vault-neg); }
+.nw-empty { color: var(--vault-soft); margin: 8px 0 16px; max-width: 34ch; }
+.spark { display: block; width: 100%; height: 54px; margin: 12px 0 10px; color: var(--vault-gold); overflow: visible; }
+.spark-dot { fill: var(--vault-gold); }
+.nw-bar { display: flex; height: 8px; border-radius: 2px; overflow: hidden; background: rgba(255, 255, 255, 0.08); margin-top: 6px; }
+.nw-bar span { display: block; height: 100%; }
+.seg-cash { background: var(--vault-soft); }
+.seg-inv { background: var(--vault-gold); }
+.seg-sav { background: #6FCB98; }
+.nw-legend { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 4px; font-size: 0.9rem; }
+.nw-legend li { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; color: var(--vault-soft); }
+.nw-legend li .num { color: var(--vault-ink); font-weight: 500; }
+.nw-legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+/* ---------- save tab ---------- */
+.big-stat { font-family: var(--f-display); font-weight: 900; font-size: 2.6rem; line-height: 1; margin: 6px 0; color: var(--gold-ink); }
+.save-intro { padding-top: 4px !important; padding-bottom: 22px !important; }
+.save-intro .btn { margin-top: 16px; width: 100%; }
+.goal { padding: 14px 0; border-bottom: 1px solid var(--rule-soft); }
+.goal-top { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.goal-name { font-weight: 700; }
+.goal .bar { margin: 10px 0 8px; height: 8px; }
+.goal .bar-fill { background: var(--gold); }
+.goal-actions { display: flex; gap: 18px; align-items: center; }
+.goal-actions .link { font-size: 0.9rem; min-height: 40px; padding: 4px 0; }
+.wish { padding: 14px 0; border-bottom: 1px solid var(--rule-soft); }
+.wish-top { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.wish-status { font-size: 0.875rem; color: var(--ink-3); margin-top: 2px; }
+.wish-status.ready { color: var(--ink); font-weight: 500; }
+.wish-actions { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+.section-gap { margin-top: 34px; }
+.block-p { font-size: 0.9rem; color: var(--ink-2); margin: 10px 0 6px; max-width: 40ch; }
+
+.cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin: 10px 0 8px; }
+.cal-wd { font-size: 0.6875rem; text-align: center; color: var(--ink-3); padding-bottom: 2px; }
+.cal-day {
+  aspect-ratio: 1; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.8125rem; font-variant-numeric: tabular-nums;
+  border: 1px solid var(--rule-soft); color: var(--ink-3);
+}
+.cal-day.is-free { background: var(--good); border-color: var(--good); color: var(--paper); font-weight: 700; }
+.cal-day.is-spent { background: var(--paper-2); color: var(--ink-2); }
+.cal-day.is-today { box-shadow: inset 0 0 0 2px var(--ink); color: var(--ink); font-weight: 700; }
+.cal-day.is-future { border-style: dashed; border-color: var(--rule); background: transparent; }
+.cal-legend { display: flex; gap: 16px; font-size: 0.8125rem; color: var(--ink-3); }
+.cal-legend span { display: inline-flex; gap: 6px; align-items: center; }
+.cal-legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }

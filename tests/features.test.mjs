@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import * as L from '../app/js/logic.js';
-import * as S from '../app/js/store.js';
+import * as L from '../src/lib/logic.js';
+import * as S from '../src/lib/storage.js';
 
 const ILS = (n) => n * 100;
 function stateWith(over = {}) {

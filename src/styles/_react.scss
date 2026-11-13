@@ -1,0 +1,5 @@
+// Small additions for the React version
+@use 'tokens';
+
+// The story's slides sit inside a wrapper for keyboard handling; it must not break the dialog's flex column
+.story-wrap { display: contents; }

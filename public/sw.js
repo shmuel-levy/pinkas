@@ -1,25 +1,8 @@
 // פנקס service worker: the whole app works offline.
-// Bump VERSION whenever any app file changes so phones pick up the update.
-const VERSION = 'pinkas-1.6.0';
-const SHELL = [
-  './',
-  './index.html',
-  './css/app.css',
-  './js/app.js',
-  './js/logic.js',
-  './js/store.js',
-  './js/fx.js',
-  './js/piggy.js',
-  './js/story.js',
-  './js/invest.js',
-  './js/investui.js',
-  './js/onboard.js',
-  './manifest.webmanifest',
-  './img/guilloche.svg',
-  './icons/apple-touch-icon.png',
-  './icons/icon-192.png',
-  './icons/icon-512.png',
-];
+// The build fills in VERSION and SHELL below with a content hash and the list of built files
+// (see vite.config.js), so every deploy that changes a file reaches phones as an update.
+const VERSION = 'pinkas-__VERSION__';
+const SHELL = __PRECACHE__;
 const FONT_CACHE = 'pinkas-fonts';
 const GEN_CACHE = 'pinkas-gen'; // files the page generates (calendar reminder)
 
@@ -31,7 +14,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
       .then((keys) => Promise.all(keys.filter((k) => ![VERSION, FONT_CACHE, GEN_CACHE].includes(k)).map((k) => caches.delete(k))))
-      .then(() => self.clients.claim())
+      .then(() => self.clients.claim()),
   );
 });
 
@@ -54,7 +37,7 @@ self.addEventListener('fetch', (event) => {
           return res;
         }).catch(() => hit);
         return hit || net;
-      })
+      }),
     );
     return;
   }
@@ -64,7 +47,7 @@ self.addEventListener('fetch', (event) => {
   // Generated calendar file
   if (url.pathname.endsWith('.ics')) {
     event.respondWith(
-      caches.open(GEN_CACHE).then((c) => c.match(req, { ignoreSearch: true })).then((hit) => hit || fetch(req))
+      caches.open(GEN_CACHE).then((c) => c.match(req, { ignoreSearch: true })).then((hit) => hit || fetch(req)),
     );
     return;
   }
@@ -76,19 +59,21 @@ self.addEventListener('fetch', (event) => {
         const copy = res.clone();
         caches.open(VERSION).then((c) => c.put('./index.html', copy));
         return res;
-      }).catch(() => caches.match('./index.html'))
+      }).catch(() => caches.match('./index.html', { ignoreVary: true })),
     );
     return;
   }
 
-  // Static files: cache first
+  // Static files (hashed by the build): cache first.
+  // ignoreVary: module scripts are requested with crossorigin (an Origin header), and a server's
+  // "Vary: Origin" would otherwise make the offline cache miss.
   event.respondWith(
-    caches.match(req, { ignoreSearch: true }).then((hit) => hit || fetch(req).then((res) => {
+    caches.match(req, { ignoreSearch: true, ignoreVary: true }).then((hit) => hit || fetch(req).then((res) => {
       if (res.ok) {
         const copy = res.clone();
         caches.open(VERSION).then((c) => c.put(req, copy));
       }
       return res;
-    }))
+    })),
   );
 });

@@ -3,7 +3,7 @@ import { writeFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-const out = join(dirname(fileURLToPath(import.meta.url)), '..', 'app', 'img');
+const out = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'img');
 mkdirSync(out, { recursive: true });
 
 const W = 600, H = 300;

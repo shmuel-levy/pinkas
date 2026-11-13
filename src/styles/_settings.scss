@@ -1,0 +1,52 @@
+@use 'tokens';
+
+/* ---------- settings ---------- */
+.set-group { margin-bottom: 30px; }
+.set-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--rule-soft); min-height: 56px; }
+.set-row label, .set-row .label { flex: 1; }
+.set-row .hint, .place-name .hint { display: block; font-size: 0.8125rem; color: var(--ink-3); }
+.set-row .field { width: 8.5em; flex: none; text-align: center; }
+.set-row select.field { width: 9.5em; text-align: start; }
+.cat-edit { display: grid; grid-template-columns: auto 1fr 6.5em auto; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--rule-soft); }
+.cat-edit .field, .place-edit .field { min-height: 42px; padding: 8px 10px; }
+.cat-edit .money { text-align: center; }
+.x { min-width: 40px; min-height: 40px; border: 0; background: none; color: var(--ink-3); border-radius: 8px; font-size: 1.1rem; }
+.swatch { width: 26px; height: 26px; border-radius: 6px; border: 0; padding: 0; }
+.place-edit { display: grid; grid-template-columns: 1fr 8.5em auto; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--rule-soft); }
+.place-name { font-weight: 500; min-width: 0; overflow-wrap: anywhere; }
+.reminder-box { margin-top: 14px; padding: 14px; background: var(--paper-2); border-radius: var(--radius); display: grid; gap: 10px; font-size: 0.9rem; }
+.reminder-box .btn { justify-self: start; }
+.seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 10px; padding: 3px; gap: 2px; }
+.seg label { position: relative; }
+.seg input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.seg span { display: inline-block; padding: 7px 12px; border-radius: 7px; font-size: 0.875rem; min-height: 36px; }
+.seg input:checked + span { background: var(--money); color: var(--money-ink); font-weight: 700; }
+.seg input:focus-visible + span { outline: 2px solid var(--gold); outline-offset: 1px; }
+.switch { position: relative; width: 50px; height: 30px; flex: none; }
+.switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; z-index: 1; }
+.switch span { position: absolute; inset: 0; background: var(--paper-3); border-radius: 30px; transition: background 160ms; }
+.switch span::after { content: ''; position: absolute; top: 3px; right: 3px; width: 24px; height: 24px; border-radius: 50%; background: var(--paper); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25); transition: transform 180ms var(--ease-out); }
+.switch input:checked + span { background: var(--money); }
+.switch input:checked + span::after { transform: translateX(-20px); }
+.switch input:focus-visible + span { outline: 2px solid var(--gold); outline-offset: 2px; }
+.data-actions { display: grid; gap: 10px; margin-top: 12px; }
+.data-actions .btn { width: 100%; }
+.about { font-size: 0.8125rem; color: var(--ink-3); padding-bottom: 20px !important; }
+.install-steps { margin: 8px 0 0; padding-inline-start: 1.2em; }
+.install-steps li { margin-bottom: 4px; }
+
+.hint-box { margin: 0 var(--gutter) 26px; padding: 12px 14px; border: 1px dashed var(--ink-3); border-radius: var(--radius); font-size: 0.9rem; }
+.hint-box strong { display: block; margin-bottom: 2px; }
+.hint-box .link { font-size: 0.875rem; min-height: 36px; padding: 4px 0; }
+
+/* ---------- onboarding ---------- */
+.onb { padding: 28px var(--gutter) 40px !important; }
+.onb-title { font-family: var(--f-display); font-weight: 900; font-size: 3rem; line-height: 1; color: var(--money); }
+.onb-lead { color: var(--ink-2); font-size: 1.05rem; margin: 12px 0 28px; max-width: 30ch; }
+.onb-q { padding: 18px 0; border-top: 1px solid var(--rule); }
+.onb-q label { display: block; font-weight: 700; margin-bottom: 4px; }
+.onb-q .hint { display: block; font-size: 0.875rem; color: var(--ink-3); margin-bottom: 10px; }
+.money-field { position: relative; }
+.money-field .field { font-size: 1.35rem; font-weight: 700; padding-inline-end: 34px; direction: ltr; text-align: right; }
+.money-field .cur { position: absolute; inset-inline-end: 12px; top: 50%; transform: translateY(-50%); color: var(--ink-3); font-weight: 500; pointer-events: none; }
+.onb .btn-primary { width: 100%; margin-top: 18px; }

@@ -1,9 +1,11 @@
-# Every push to main: run the tests, and only if they pass, publish the app/ folder to GitHub Pages.
-name: Deploy to GitHub Pages
+# Every push to main: install, run all tests (logic + React UI), build with Vite,
+# and only if everything passes, publish dist/ to GitHub Pages.
+name: Test, build and deploy
 
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -12,32 +14,36 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  test:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+      - run: npm ci
       - run: npm test
         env:
           TZ: Asia/Jerusalem
+      - run: npm run build
+      - uses: actions/upload-pages-artifact@v3
+        if: github.ref == 'refs/heads/main'
+        with:
+          path: dist
 
   deploy:
-    needs: test
+    if: github.ref == 'refs/heads/main'
+    needs: build
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: app
       - id: deployment
         uses: actions/deploy-pages@v4

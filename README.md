@@ -1,6 +1,6 @@
 # פנקס — אפליקציית הוצאות אישית
 
-אפליקציית ווב (PWA) לאייפון: נפתחת ממסך הבית כמו אפליקציה רגילה, עובדת בלי אינטרנט, ושומרת את הנתונים רק בטלפון.
+אפליקציית ווב (PWA) לאייפון, בנויה ב־**React + Redux Toolkit + Vite + SCSS**: נפתחת ממסך הבית כמו אפליקציה רגילה, עובדת בלי אינטרנט, ושומרת את הנתונים רק בטלפון.
 בלי שרת, בלי חשבון, בלי תשלום.
 
 ## מה יש בפנים
@@ -63,36 +63,21 @@
 
 ## התקנה באייפון בחינם
 
-כדי שספארי יוכל להתקין את האפליקציה, הקבצים צריכים להיות באתר עם כתובת https. יש שתי דרכים חינמיות:
+כדי שספארי יוכל להתקין את האפליקציה, היא צריכה להיות באתר עם כתובת https.
 
-### דרך א׳: Netlify Drop (הכי מהיר, בלי ידע טכני)
-1. נכנסים במחשב ל־https://app.netlify.com/drop ונרשמים בחינם.
-2. גוררים לחלון את **התיקייה `app`** (רק אותה).
-3. מקבלים כתובת כמו `https://something.netlify.app`.
+### GitHub Pages (כל עדכון עולה לבד)
+יש בפרויקט תהליך אוטומטי (`.github/workflows/pages.yml`): בכל העלאה ל־main הוא מתקין, מריץ את כל הבדיקות, בונה עם Vite, ורק אם הכל עבר — מפרסם את `dist`.
 
-### דרך ב׳: GitHub Pages (מומלץ, כי כל עדכון עולה לבד)
-הפרויקט כבר מוכן ל־GitHub. יש בו תהליך אוטומטי (`.github/workflows/pages.yml`): בכל העלאה הוא מריץ את הבדיקות, ורק אם כולן עוברות הוא מפרסם את התיקייה `app`.
+**פעם ראשונה:** במאגר ב־GitHub נכנסים ל־Settings ← Pages, ותחת Source בוחרים **GitHub Actions**. הכתובת תהיה `https://<שם-משתמש>.github.io/pinkas/`.
 
-**פעם ראשונה:**
-1. נכנסים ל־https://github.com/new.
-2. ב־Repository name כותבים `pinkas`. בוחרים **Public**, כי באתר חינמי של GitHub Pages המאגר חייב להיות ציבורי. **לא** מסמנים README, .gitignore או license, כי המאגר צריך להיות ריק.
-3. לוחצים Create repository ומעתיקים את הכתובת שמופיעה, למשל `https://github.com/<שם-משתמש>/pinkas.git`.
-4. מעלים את הקוד (או ש־Claude מעלה בשבילך):
-   ```bash
-   git remote add origin https://github.com/<שם-משתמש>/pinkas.git
-   ```
-   ```bash
-   git push -u origin main
-   ```
-   בהעלאה הראשונה ייפתח חלון התחברות ל־GitHub בדפדפן.
-5. במאגר ב־GitHub נכנסים ל־Settings ← Pages. תחת Source בוחרים **GitHub Actions**.
-6. בלשונית Actions מחכים לסימן ✓ ירוק (בערך דקה). הכתובת תהיה:
-   `https://<שם-משתמש>.github.io/pinkas/`
-
-**כל עדכון אחר כך:** מעלים את מספר הגרסה ב־`app/sw.js`, ואז:
+**כל עדכון אחר כך:**
 ```bash
 git add -A && git commit -m "עדכון" && git push
 ```
+אין צורך להעלות מספר גרסה ידנית: הבנייה מחשבת חתימה לקבצים, ובפתיחה הבאה תופיע הודעה ״יש גרסה חדשה״.
+
+### Netlify Drop (בלי GitHub)
+מריצים `npm run build` וגוררים את התיקייה **`dist`** ל־https://app.netlify.com/drop.
 
 > **פרטיות:** במאגר יש רק את הקוד. ההוצאות, ההכנסות והשווי שלך נשמרים רק בטלפון ולא עולים לשום מקום.
 
@@ -101,30 +86,50 @@ git add -A && git commit -m "עדכון" && git push
 2. לוחצים על כפתור השיתוף (ריבוע עם חץ למעלה).
 3. בוחרים ״הוספה למסך הבית״.
 
-מעכשיו פנקס נפתח ממסך הבית במסך מלא ועובד גם בלי אינטרנט.
-
-> **חשוב:** הנתונים שמורים רק בטלפון. פעם בחודש כדאי ללחוץ על הגדרות ← ״שמירת גיבוי״ ולשמור את הקובץ ב־iCloud Drive. אחרי 30 יום בלי גיבוי האפליקציה תזכיר לך.
-
-## עדכון גרסה
-אחרי כל שינוי בקבצים מעלים את מספר הגרסה בשורה `VERSION` בקובץ `app/sw.js` (למשל `pinkas-1.0.1`) ומעלים מחדש. בפתיחה הבאה תופיע באפליקציה הודעה ״יש גרסה חדשה״.
+> **חשוב:** הנתונים שמורים רק בטלפון. פעם בחודש כדאי ללחוץ על הגדרות ← ״שמירת גיבוי״ ולשמור את הקובץ ב־iCloud Drive.
 
 ## בדרך ל־App Store
-הקוד בנוי כך שאפשר לעטוף אותו כאפליקציה אמיתית בלי לשנות אותו: אין שרת, כל הנתיבים יחסיים, ויש אייקון 1024×1024 בתיקייה `app/icons/`.
-1. מתקינים את [Capacitor](https://capacitorjs.com): `npm i @capacitor/core @capacitor/cli @capacitor/ios`.
-2. מריצים `npx cap init פנקס com.yourname.pinkas --web-dir=app`, ואז `npx cap add ios`.
-3. פותחים ב־Xcode (צריך מק) ומעלים.
+אין שרת וכל הנתיבים יחסיים, אז אפשר לעטוף את `dist` עם [Capacitor](https://capacitorjs.com):
+`npx cap init פנקס com.yourname.pinkas --web-dir=dist`, ואז `npx cap add ios` ו־Xcode (צריך מק וחשבון Apple Developer).
 
-כדי לפרסם ב־App Store צריך חשבון Apple Developer, שעולה 99$ לשנה. גרסת ה־PWA שלמעלה חינמית לגמרי.
+---
+
+## Tech stack & architecture
+
+**React 19 · Redux Toolkit · Vite · SCSS · PWA (Service Worker) · Vitest + React Testing Library · GitHub Actions CI/CD**
+
+A mobile-first, offline-first personal finance PWA in Hebrew (RTL). No backend: all data stays on the device.
+
+| Layer | What's there |
+| --- | --- |
+| **UI** | React 19 function components and hooks (`src/pages`, `src/components`, `src/sheets`). Native `<dialog>` sheets with focus trapping, a guided tour, an animated monthly "story", SVG charts built by hand. |
+| **State** | Redux Toolkit: a `data` slice (everything saved: expenses, incomes, budgets, goals, snapshots…) and a `ui` slice (navigation, ledger filters, questionnaires). Reducers stay pure; ids and timestamps are created in `prepare`. Transient overlays (toasts, sheets) live in a small React context. |
+| **Persistence** | The store is persisted to `localStorage` on every change, with schema normalisation/migration so data from the earlier vanilla-JS version (v1.x) loads unchanged. JSON backup/restore and CSV export. |
+| **Domain logic** | `src/lib/logic.js` — pure, framework-free functions: budget cycles, per-day allowance, over-budget impact, recurring charges, insurance spread over 12 months, net worth, live balances, streaks, savings tips. `src/lib/invest.js` — broker fee comparison and pension-fee calculator. |
+| **Styling** | SCSS partials with a design-token map, a `theme` mixin generating light/dark CSS variables, breakpoint and reduced-motion mixins. |
+| **PWA** | A custom Vite plugin injects the built file list and a content hash into the service worker, so the app works fully offline and every deploy reaches installed phones as an update. |
+| **Testing** | 88 unit tests for the domain logic (`node:test`) + 20 Vitest/RTL tests that drive the real app: onboarding, adding an expense through the pay step, the over-budget stop, the budget questionnaire, the monthly check-in with USD conversion, goals, investments, and loading data saved by the previous version. |
+| **CI/CD** | GitHub Actions: `npm ci` → tests → `vite build` → deploy to GitHub Pages, on every push to `main`. |
+| **Accessibility** | Checked with axe-core on every page and sheet, in light and dark mode; no horizontal overflow at 320px. |
 
 ## פיתוח ובדיקות
 ```bash
-node server.mjs          # http://localhost:5178
-npm test         # 53 בדיקות לוגיקה
+npm install
+```
+```bash
+npm run dev        # http://localhost:5178
+```
+```bash
+npm test           # 88 בדיקות לוגיקה + 20 בדיקות ממשק (Vitest + Testing Library)
+```
+```bash
+npm run build      # dist/ לפרסום
 ```
 
-- `app/js/logic.js`: כל החישובים (תקציב, מחזורים, חיובים קבועים, תובנות). בלי DOM, ולכן אפשר לבדוק אותו ב־Node.
-- `app/js/store.js`: שמירה, ולידציה של גיבויים ותיקון נתונים פגומים.
-- `app/js/app.js`: ממשק המשתמש.
-- `app/sw.js`: עבודה בלי אינטרנט.
-- `tools/make-icons.ps1`: יוצר מחדש את האייקונים.
-- `tools/make-guilloche.mjs`: יוצר את דוגמת הקווים של שטר הכסף (`app/img/guilloche.svg`).
+- `src/lib/logic.js`: כל החישובים (תקציב, מחזורים, חיובים קבועים, תובנות). בלי DOM, ולכן נבדק ב־Node.
+- `src/lib/storage.js`: שמירה, ולידציה של גיבויים ותיקון נתונים פגומים.
+- `src/store/`: Redux — `dataSlice` (כל מה שנשמר) ו־`uiSlice` (ניווט ומסננים).
+- `src/pages/`, `src/sheets/`, `src/components/`: הממשק ב־React.
+- `src/styles/`: SCSS, עם טוקנים לעיצוב בהיר וכהה.
+- `public/sw.js`: עבודה בלי אינטרנט (רשימת הקבצים נכתבת בזמן הבנייה ב־`vite.config.js`).
+- `tools/make-icons.ps1`, `tools/make-guilloche.mjs`: יוצרים מחדש את האייקונים ואת דוגמת השטר.

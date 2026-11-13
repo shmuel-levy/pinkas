@@ -1,0 +1,104 @@
+// Design tokens — banknote paper, money green, a little gold.
+// Green = money / primary action. Gold = savings & investments. Red = over budget only.
+// One map per theme; the `theme` mixin turns a map into CSS custom properties,
+// so light and dark can never drift apart in which tokens they define.
+
+@use 'sass:map';
+
+$light: (
+  'paper': #F3F0E6,
+  'paper-2': #E8E4D5,
+  'paper-3': #D9D3BF,
+  'ink': #13241C,
+  'ink-2': #3C4B42,
+  'ink-3': #55625A,
+  'rule': #C9C2AB,
+  'rule-soft': #DDD7C5,
+  'money': #0F4A35,
+  'money-ink': #F3F0E6,
+  'bar-ok': #0F4A35,
+  'gold': #B08A2E,
+  'gold-ink': #7A5B10,
+  'accent': #B23C10,
+  'accent-ink': #FFF6EE,
+  'good': #1F6B47,
+  'warn': #7E560B,
+  'vault': #0F3B2C,
+  'vault-2': #134634,
+  'vault-ink': #F3F0E6,
+  'vault-soft': #B7C7BA,
+  'vault-gold': #D9B65C,
+  'vault-neg': #FF9C7A,
+  'vault-line': rgba(217, 182, 92, 0.2),
+  'vault-edge': transparent,
+  'margin-line': rgba(176, 138, 46, 0.45),
+  'backdrop': rgba(10, 24, 18, 0.5),
+  'sheet': #F7F5EE,
+  'key': #E8E4D5,
+  'key-press': #D6CFB9,
+);
+
+$dark: map.merge($light, (
+  'paper': #0C1410,
+  'paper-2': #142019,
+  'paper-3': #1F2D25,
+  'ink': #ECE7D8,
+  'ink-2': #C2C9BC,
+  'ink-3': #9AA699,
+  'rule': #2E4036,
+  'rule-soft': #1F2D25,
+  'money': #5CC293,
+  'money-ink': #0C1410,
+  'bar-ok': #5CC293,
+  'gold': #D9B65C,
+  'gold-ink': #E3C373,
+  'accent': #F0794A,
+  'accent-ink': #1A0E08,
+  'good': #6FCB98,
+  'warn': #E0AE4F,
+  'vault': #11261C,
+  'vault-2': #163126,
+  'vault-ink': #ECE7D8,
+  'vault-soft': #AFC0B3,
+  'vault-line': rgba(217, 182, 92, 0.14),
+  'vault-edge': #24392D,
+  'margin-line': rgba(217, 182, 92, 0.3),
+  'backdrop': rgba(0, 0, 0, 0.6),
+  'sheet': #111C16,
+  'key': #1A2820,
+  'key-press': #26372D,
+));
+
+@mixin theme($tokens, $scheme) {
+  @each $name, $value in $tokens {
+    --#{$name}: #{$value};
+  }
+  color-scheme: $scheme;
+}
+
+// Breakpoints and motion preferences used across the partials
+$bp-tablet: 600px;
+@mixin from($bp) {
+  @media (min-width: $bp) { @content; }
+}
+@mixin reduced-motion {
+  @media (prefers-reduced-motion: reduce) { @content; }
+}
+
+:root {
+  @include theme($light, light);
+  --f-display: 'Frank Ruhl Libre', 'Times New Roman', serif;
+  --f-body: 'IBM Plex Sans Hebrew', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+  --gutter: 16px;
+  --radius: 12px;
+  --tabbar-h: 64px;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) { @include theme($dark, dark); }
+}
+:root[data-theme='dark'] { @include theme($dark, dark); }
+
+@include from($bp-tablet) {
+  :root { --gutter: 28px; }
+}

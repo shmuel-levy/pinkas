@@ -1,0 +1,115 @@
+@use 'tokens';
+
+/* ---------- frame ---------- */
+.app {
+  max-width: 560px;
+  margin: 0 auto;
+  min-height: 100dvh;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 24px);
+}
+.top { padding: 14px var(--gutter) 8px; position: sticky; top: 0; z-index: 5; background: var(--paper); }
+.top-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; }
+.brand {
+  font-family: var(--f-display);
+  font-weight: 900;
+  font-size: 1.75rem;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  color: var(--money);
+}
+.brand::after {
+  /* a tiny gold seal next to the name */
+  content: '';
+  display: inline-block;
+  width: 7px; height: 7px;
+  margin-inline-start: 6px;
+  border-radius: 50%;
+  background: var(--gold);
+  vertical-align: 0.35em;
+}
+.cycle { color: var(--ink-3); font-size: 0.875rem; margin-top: 2px; }
+.icon-btn, .back {
+  min-width: 44px; min-height: 44px;
+  border: 0; background: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--ink-2); border-radius: 8px;
+}
+.back { gap: 6px; font-weight: 500; color: var(--ink); padding: 0 6px; margin-inline-start: -6px; }
+.icon-btn:active, .back:active { background: var(--paper-2); }
+
+main > section, main > .block { padding: 0 var(--gutter); }
+
+/* ---------- tab bar ---------- */
+.tabs {
+  position: fixed; inset-inline: 0; bottom: 0; z-index: 10;
+  background: var(--paper);
+  border-top: 1px solid var(--rule);
+  padding: 6px max(10px, env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.35fr 1fr 1fr;
+  align-items: center;
+  max-width: 560px;
+  margin: 0 auto;
+}
+.tabs button { border: 0; background: none; min-height: 48px; font-size: 0.875rem; font-weight: 500; color: var(--ink-3); position: relative; }
+.tabs button[aria-current='page'] { color: var(--ink); font-weight: 700; }
+.tabs button[aria-current='page']::before {
+  content: ''; position: absolute; top: -7px; inset-inline: 22%; height: 2px; background: var(--gold);
+}
+.tabs .tab-add {
+  background: var(--money); color: var(--money-ink);
+  border-radius: 12px; font-weight: 700; font-size: 0.95rem; margin: 0 4px; min-height: 46px;
+}
+.tabs .tab-add span { font-size: 1.2rem; line-height: 0; position: relative; top: 1px; }
+.tabs .tab-add:active { transform: scale(0.97); }
+
+/* ---------- type ---------- */
+.eyebrow { font-size: 0.8125rem; font-weight: 500; color: var(--ink-3); }
+.sec-title { font-family: var(--f-display); font-weight: 700; font-size: 1.3rem; line-height: 1.2; }
+.sec-head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  padding-bottom: 8px; margin-bottom: 4px;
+  border-bottom: 2px solid var(--ink);
+  position: relative;
+}
+.sec-head::after {
+  /* gold hairline under the ink rule, like a statement header */
+  content: ''; position: absolute; inset-inline: 0; bottom: -5px; height: 1px; background: var(--gold); opacity: 0.6;
+}
+.sec-head .link { font-size: 0.875rem; }
+.muted { color: var(--ink-3); }
+.small { font-size: 0.875rem; }
+.neg { color: var(--accent); }
+.pos { color: var(--good); }
+.warn-text { color: var(--warn); }
+
+.link {
+  background: none; border: 0; padding: 8px 0;
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--gold);
+  text-underline-offset: 4px;
+  text-decoration-thickness: 1.5px;
+  font-weight: 500;
+  min-height: 44px; min-width: 44px;
+}
+.link:active { text-decoration-color: var(--ink); }
+.link-on-dark { color: var(--vault-ink); text-decoration-color: var(--vault-gold); }
+
+/* ---------- buttons ---------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 52px; padding: 0 20px;
+  border-radius: 12px; border: 0;
+  font-weight: 700; font-size: 1rem;
+  transition: transform 120ms var(--ease-out), background-color 120ms;
+}
+.btn:active { transform: scale(0.985); }
+.btn-primary { background: var(--money); color: var(--money-ink); }
+.btn-gold { background: var(--vault-gold); color: #0F3B2C; }
+.btn-accent { background: var(--accent); color: var(--accent-ink); }
+.btn-line { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--ink); }
+.btn-small { min-height: 40px; padding: 0 14px; font-size: 0.9rem; border-radius: 9px; }
+.btn-danger-quiet { background: none; color: var(--accent); font-weight: 500; min-height: 44px; }
+.btn[disabled] { opacity: 0.45; }
