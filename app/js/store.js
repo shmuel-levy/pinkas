@@ -1,6 +1,8 @@
 // Persistence: one versioned JSON blob in localStorage.
 // Installed home-screen apps on iOS keep their storage; we also ask for persistent storage.
-import { uid, clampCycleDay, ASSET_TYPES, BANKS } from './logic.js';
+import { uid, clampCycleDay, ASSET_TYPES, BANKS, PAY_METHODS } from './logic.js';
+
+const PAY_KEYS = PAY_METHODS.map((p) => p.key);
 
 export const STORAGE_KEY = 'pinkas.v1';
 export const SCHEMA = 1;
@@ -50,8 +52,13 @@ export function defaultState() {
       installGuideSeen: false,
       bank: '',
       usdRate: null, // { rate, date }
+      toursSeen: {}, // page -> true once its guide was shown
+      streakShown: '', // date the daily streak animation last played
+      lastPay: 'credit',
     },
     invest: { status: null, profile: null, broker: null, pension: null },
+    balanceAnchor: null, // { checking, cash, at } — last balances the user stated
+    visits: [], // dates the app was opened (streak)
     categories: defaultCategories(),
     expenses: [],
     recurring: [],
@@ -111,6 +118,10 @@ export function normalize(raw) {
   settings.tourDone = !!s.tourDone;
   settings.installGuideSeen = !!s.installGuideSeen;
   settings.bank = BANKS.some((b) => b.id === s.bank) ? s.bank : '';
+  settings.toursSeen = {};
+  if (isObj(s.toursSeen)) for (const [k, v] of Object.entries(s.toursSeen)) if (v === true && /^[a-z]{1,20}$/.test(k)) settings.toursSeen[k] = true;
+  settings.streakShown = isDate(s.streakShown) ? s.streakShown : '';
+  settings.lastPay = PAY_KEYS.includes(s.lastPay) ? s.lastPay : 'credit';
   settings.usdRate = isObj(s.usdRate) && Number.isFinite(s.usdRate.rate) && s.usdRate.rate > 1 && s.usdRate.rate < 10 && isDate(s.usdRate.date)
     ? { rate: s.usdRate.rate, date: s.usdRate.date }
     : null;
@@ -154,6 +165,7 @@ export function normalize(raw) {
       createdAt: Number.isFinite(e.createdAt) ? e.createdAt : Date.now(),
       ...(e.recurringId ? { recurringId: String(e.recurringId) } : {}),
       ...(e.spreadId ? { spreadId: String(e.spreadId) } : {}),
+      ...(PAY_KEYS.includes(e.pay) ? { pay: e.pay } : {}),
     }));
   const recurring = (Array.isArray(raw.recurring) ? raw.recurring : [])
     .filter((r) => isObj(r) && isInt(r.amount) && r.amount > 0)
@@ -166,6 +178,7 @@ export function normalize(raw) {
       startMonth: /^\d{4}-\d{2}$/.test(r.startMonth) ? r.startMonth : null,
       lastMonth: /^\d{4}-\d{2}$/.test(r.lastMonth) ? r.lastMonth : null,
       active: r.active !== false,
+      ...(PAY_KEYS.includes(r.pay) ? { pay: r.pay } : {}),
     }));
   const goals = (Array.isArray(raw.goals) ? raw.goals : [])
     .filter((g) => isObj(g) && isInt(g.target) && g.target > 0)
@@ -236,11 +249,18 @@ export function normalize(raw) {
       amount: x.amount,
       date: x.date,
       source: str(x.source, 30) || 'אחר',
+      ...(x.to === 'cash' ? { to: 'cash' } : {}),
       note: str(x.note, 80),
       createdAt: Number.isFinite(x.createdAt) ? x.createdAt : Date.now(),
     }));
 
-  return { schema: SCHEMA, onboarded: raw.onboarded !== false, settings, categories, expenses, recurring, goals, wishlist, resisted, snapshots, placePrefs, spreads, incomes, invest };
+  const ba = raw.balanceAnchor;
+  const balanceAnchor = isObj(ba) && Number.isInteger(ba.checking) && Number.isFinite(ba.at)
+    ? { checking: ba.checking, cash: Number.isInteger(ba.cash) ? ba.cash : 0, at: ba.at }
+    : null;
+  const visits = (Array.isArray(raw.visits) ? raw.visits : []).filter(isDate).sort().slice(-500);
+
+  return { schema: SCHEMA, onboarded: raw.onboarded !== false, settings, categories, expenses, recurring, goals, wishlist, resisted, snapshots, placePrefs, spreads, incomes, invest, balanceAnchor, visits: [...new Set(visits)] };
 }
 
 export function load(storage = globalThis.localStorage) {

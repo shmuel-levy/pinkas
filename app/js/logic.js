@@ -182,6 +182,7 @@ export function applyRecurring(state, today) {
       date,
       createdAt: Date.now(),
       recurringId: item.id,
+      pay: item.pay || 'transfer', // standing orders come out of the bank account
     };
     next.expenses.push(exp);
     added.push(exp);
@@ -762,7 +763,7 @@ export function standingOrderHint(state, { note, catId, amount }) {
 
 // Turns a just-recorded expense into a recurring item. This month is already paid (the expense itself),
 // so generation continues from next month.
-export function recurringFromExpense({ note, amount, catId, date }, id = uid()) {
+export function recurringFromExpense({ note, amount, catId, date, pay }, id = uid()) {
   return {
     id,
     name: String(note || '').trim() || 'הוראת קבע',
@@ -772,7 +773,87 @@ export function recurringFromExpense({ note, amount, catId, date }, id = uid()) 
     startMonth: monthKey(date),
     lastMonth: monthKey(date),
     active: true,
+    ...(pay ? { pay } : {}),
   };
+}
+
+/* ---------- how an expense was paid, and live balances ---------- */
+export const PAY_METHODS = [
+  { key: 'credit', label: 'אשראי', from: 'checking' },
+  { key: 'app', label: 'ביט / פייבוקס', from: 'checking' },
+  { key: 'cash', label: 'מזומן', from: 'cash' },
+  { key: 'transfer', label: 'העברה בנקאית', from: 'checking' },
+];
+export const payLabel = (k) => PAY_METHODS.find((p) => p.key === k)?.label || '';
+// where a payment method takes the money from
+export const payFrom = (k) => (k === 'cash' ? 'cash' : 'checking');
+
+/**
+ * Checking and cash right now: the last balance the user stated (anchor), minus expenses and plus incomes
+ * recorded after it. Insurance shares are budgeting entries, not real payments, so they don't move money.
+ * anchor: { checking, cash, at (ms) }
+ */
+export function liveBalances(state, today) {
+  const a = state.balanceAnchor;
+  if (!a) return null;
+  let checking = a.checking || 0;
+  let cash = a.cash || 0;
+  for (const e of state.expenses) {
+    if (e.spreadId || (e.createdAt || 0) <= a.at || e.date > today) continue;
+    if (payFrom(e.pay) === 'cash') cash -= e.amount;
+    else checking -= e.amount;
+  }
+  for (const i of state.incomes || []) {
+    if ((i.createdAt || 0) <= a.at || i.date > today) continue;
+    if (i.to === 'cash') cash += i.amount;
+    else checking += i.amount;
+  }
+  return { checking, cash, since: a.at };
+}
+
+/* ---------- daily streak (opening the app) ---------- */
+// visits: ISO dates the app was opened. Streak = consecutive days ending today (or yesterday, if not opened yet today).
+export function streakCount(visits, today) {
+  const set = new Set(visits || []);
+  let d = set.has(today) ? today : addDays(today, -1);
+  let n = 0;
+  while (set.has(d)) {
+    n++;
+    d = addDays(d, -1);
+  }
+  return n;
+}
+export function bestStreak(visits) {
+  const days = [...new Set(visits || [])].sort();
+  let best = 0;
+  let run = 0;
+  let prev = null;
+  for (const d of days) {
+    run = prev && dayDiff(prev, d) === 1 ? run + 1 : 1;
+    best = Math.max(best, run);
+    prev = d;
+  }
+  return best;
+}
+// One month of activity for the streak calendar
+export function activityMonth(state, monthKeyStr, today) {
+  const [y, m] = monthKeyStr.split('-').map(Number);
+  const visits = new Set(state.visits || []);
+  const logged = new Map();
+  const bump = (d, k) => {
+    if (!logged.has(d)) logged.set(d, { exp: 0, inc: 0 });
+    logged.get(d)[k]++;
+  };
+  for (const e of state.expenses) if (!e.recurringId && e.date.startsWith(monthKeyStr)) bump(e.date, 'exp');
+  for (const i of state.incomes || []) if (i.date.startsWith(monthKeyStr)) bump(i.date, 'inc');
+  const days = [];
+  for (let d = 1; d <= daysInMonth(y, m - 1); d++) {
+    const iso = `${monthKeyStr}-${pad(d)}`;
+    const l = logged.get(iso) || { exp: 0, inc: 0 };
+    days.push({ date: iso, opened: visits.has(iso), exp: l.exp, inc: l.inc, future: iso > today, today: iso === today });
+  }
+  const past = days.filter((d) => !d.future);
+  return { days, firstDow: new Date(y, m - 1, 1).getDay(), opened: past.filter((d) => d.opened).length, missed: past.filter((d) => !d.opened).length, empty: past.filter((d) => !d.exp && !d.inc).length };
 }
 
 /* ---------- improvement tips ---------- */

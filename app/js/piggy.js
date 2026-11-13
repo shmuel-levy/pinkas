@@ -11,7 +11,9 @@ export function piggySVG(level, { from = null, label = '' } = {}) {
   const start = from === null ? lv : clamp(from);
   // body spans y=30..136 inside the clip; liquid top moves within it
   const y = (v) => (136 - 106 * v).toFixed(1);
-  return `<svg class="piggy" viewBox="0 0 220 160" role="img" aria-label="${label}" data-level="${lv}" data-from="${start}">
+  // decorative when there's no label (e.g. next to a number that already says it)
+  const a11y = label ? `role="img" aria-label="${label}"` : 'aria-hidden="true"';
+  return `<svg class="piggy" viewBox="0 0 220 160" ${a11y} data-level="${lv}" data-from="${start}">
     <defs>
       <clipPath id="${id}-clip">
         <ellipse cx="104" cy="86" rx="74" ry="52"/>

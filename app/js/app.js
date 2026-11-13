@@ -6,7 +6,7 @@ import { createStory } from './story.js';
 import { createInvest } from './investui.js';
 import { createOnboarding, CHANGELOG, isStandalone as standalone, platform } from './onboard.js';
 
-const VERSION = '1.5.0';
+const VERSION = '1.6.0';
 
 /* ---------- state ---------- */
 let state = S.load();
@@ -22,6 +22,9 @@ const ui = {
   piggyFrom: null,
   settings: false,
   report: null, // start date of the cycle whose report is open
+  insights: false,
+  quiz: null, // { id, step, answers }
+  welcomePending: false,
   ledgerOffset: 0,
   ledgerView: 'list', // 'list' | 'cal'
   ledgerDay: null, // a day picked in the calendar
@@ -81,143 +84,102 @@ function renderHome() {
   const fc = focusCat();
   const parts = [];
 
-  // Monthly notices: check-in due, policies to renew. (The monthly story has its own floating button.)
+  // Waiting for you: check-in, policies to renew (the monthly story has its own floating button)
   const ci = L.checkInStatus(state, t);
-  const pend = null;
   const renew = renewalsDue(t);
   if (ci.due || renew.length) {
     parts.push(`<div class="notices">
-      ${renew.map((s) => { const d = L.spreadInfo(s, t).daysToEnd; return `<button type="button" class="notice" data-act="edit-spread" data-id="${s.id}"><span class="notice-k">${esc(s.name)} מתחדש ${d === 0 ? 'היום' : d === 1 ? 'מחר' : `בעוד ${d} ימים`}</span><span class="notice-t">זה הזמן להשוות מחירים לפני שזה מתחדש לבד.</span><span class="notice-go" aria-hidden="true">←</span></button>`; }).join('')}
-      ${ci.due ? `<button type="button" class="notice" data-act="checkin"><span class="notice-k">צ׳ק־אין ${esc(L.MONTHS[Number(ci.period.slice(5, 7)) - 1])}</span><span class="notice-t">כמה נכנס, כמה בעו״ש ובהשקעות. דקה אחת.</span><span class="notice-go" aria-hidden="true">←</span></button>` : ''}
-      ${pend ? `<button type="button" class="notice" data-act="report" data-start="${pend.start}"><span class="notice-k">הסיכום של ${esc(L.cycleLabel(pend))} מוכן</span><span class="notice-t">הוצאות מול הכנסות, ואיפה אפשר להשתפר.</span><span class="notice-go" aria-hidden="true">←</span></button>` : ''}
+      ${renew.map((s) => { const d = L.spreadInfo(s, t).daysToEnd; return `<button type="button" class="notice" data-act="edit-spread" data-id="${s.id}"><span class="notice-k">${esc(s.name)} מתחדש ${d === 0 ? 'היום' : d === 1 ? 'מחר' : `בעוד ${d} ימים`}</span><span class="notice-t">זה הזמן להשוות מחירים.</span><span class="notice-go" aria-hidden="true">←</span></button>`; }).join('')}
+      ${ci.due ? `<button type="button" class="notice" data-act="checkin"><span class="notice-k">צ׳ק־אין ${esc(L.MONTHS[Number(ci.period.slice(5, 7)) - 1])}</span><span class="notice-t">מעדכנים יתרות והכנסה. דקה אחת.</span><span class="notice-go" aria-hidden="true">←</span></button>` : ''}
     </div>`);
   }
 
-  // Hero: what you can still spend today
-  if (o.hasBudget) {
+  // 1. How much money you have right now
+  const bal = L.liveBalances(state, t);
+  parts.push(`<section class="balances" aria-labelledby="bal-h">
+    <div class="home-head"><h2 class="home-title" id="bal-h">היתרה שלך</h2><button type="button" class="link small" data-act="balances">עדכון</button></div>
+    ${bal ? `<div class="bal-grid">
+      <button type="button" class="bal-tile" data-act="balances"><span class="bal-k">עו״ש${state.settings.bank ? ` · ${esc(L.bankName(state.settings.bank))}` : ''}</span><span class="bal-v ${bal.checking < 0 ? 'neg' : ''}"><span class="num" data-count="${bal.checking}">${esc(money(bal.checking, { round: true }))}</span></span></button>
+      <button type="button" class="bal-tile" data-act="balances"><span class="bal-k">מזומן</span><span class="bal-v ${bal.cash < 0 ? 'neg' : ''}"><span class="num">${esc(money(bal.cash, { round: true }))}</span></span></button>
+    </div>` : `<button type="button" class="btn btn-line btn-small" data-act="balances">להזין כמה יש בעו״ש</button>`}
+  </section>`);
+
+  // 2. Today: what you can still spend — only once there's a real monthly budget (the questionnaire sets it)
+  if (o.hasBudget && state.settings.monthlyBudget) {
     const neg = o.todayLeft < 0;
     parts.push(`<section class="hero vault" aria-labelledby="hero-l">
-      <p class="eyebrow" id="hero-l">${neg ? 'חרגת היום ב־' : 'אפשר להוציא היום'}</p>
+      <p class="eyebrow" id="hero-l">${neg ? 'חרגת היום ב־' : 'מותר להוציא היום'}</p>
       <p class="hero-num ${neg ? 'neg' : ''}"><span class="num" data-count="${Math.abs(o.todayLeft)}">${esc(money(Math.abs(o.todayLeft), { round: true }))}</span></p>
       <p class="hero-sub">${o.left >= 0
-        ? `נשארו <strong>${m(o.left, { round: true })}</strong> עד ${endLabel(sum.cycle)} — ${daysWord(o.daysLeft)}, בערך ${m(o.daysLeft ? Math.floor(o.left / o.daysLeft) : 0, { round: true })} ליום.`
-        : `עברת את התקציב החודשי ב־<strong>${m(-o.left, { round: true })}</strong>. מכאן כל שקל שנחסך מקטין את החור.`}
-        ${o.reserved ? `<br><span class="small muted">כולל ${m(o.reserved, { round: true })} לחיובים קבועים שעוד יגיעו.</span>` : ''}
-        ${o.derived ? `<br><span class="small muted">לפי סכום המעטפות. קטגוריות בלי תקציב לא נספרות כאן.</span>` : ''}</p>
+        ? `נשארו ${m(o.left, { round: true })} לעוד ${daysWord(o.daysLeft)} בחודש`
+        : `החודש עברת את התקציב ב־${m(-o.left, { round: true })}`}</p>
     </section>`);
   } else {
-    parts.push(`<section class="hero vault">
-      <p class="eyebrow">הוצאת במחזור הזה</p>
-      <p class="hero-num">${m(o.spent, { round: true })}</p>
-      <p class="hero-sub">אין עדיין תקציב חודשי, אז אין למה להשוות. <button type="button" class="link link-on-dark" data-act="settings">להגדיר תקציב</button></p>
+    parts.push(`<section class="budget-cta vault" aria-labelledby="bcta-h">
+      <p class="vault-label">היום</p>
+      <h2 class="bcta-title" id="bcta-h">כמה מותר לך להוציא?</h2>
+      <p class="hero-sub">3 שאלות קצרות, ופנקס יגיד לך כל יום כמה אפשר להוציא — ויעצור לפני חריגה.</p>
+      <button type="button" class="btn btn-gold" data-act="quiz-budget">להגדיר תקציב</button>
     </section>`);
   }
 
-  // Alerts
+  // Alerts (only the important ones)
   const alerts = [];
   for (const { cat, status } of sum.cats) {
     if (!status.hasBudget) continue;
-    if (status.state === 'over') alerts.push({ over: true, text: `חרגת ב${esc(cat.name)} ב־${m(-status.left)}` });
-    else if (status.willOverrun) alerts.push({ text: `${esc(cat.name)}: לפי הקצב הנוכחי — ${m(status.projected, { round: true })} עד סוף המחזור, מתוך ${m(status.budget, { round: true })}` });
+    if (status.state === 'over') alerts.push({ over: true, text: `${esc(cat.name)}: חריגה של ${m(-status.left)}` });
     else if (status.state === 'warn') alerts.push({ text: `${esc(cat.name)}: נשארו רק ${m(status.left)}` });
   }
   if (alerts.length) {
-    parts.push(`<ul class="alerts" aria-label="התראות תקציב">${alerts.map((a) => `<li class="${a.over ? 'is-over' : ''}"><span>${a.text}</span></li>`).join('')}</ul>`);
+    parts.push(`<ul class="alerts" aria-label="התראות תקציב">${alerts.slice(0, 3).map((a) => `<li class="${a.over ? 'is-over' : ''}"><span>${a.text}</span></li>`).join('')}</ul>`);
   }
 
-  // Focus envelope (eating out by default)
-  if (fc) {
-    const row = sum.cats.find((r) => r.cat.id === fc.id);
-    const st = row.status;
-    const habit = L.categoryHabit(state, fc.id, t);
-    let lines = '';
-    if (st.hasBudget) {
-      if (st.state === 'over') {
-        lines += `<p class="focus-line neg"><strong>חריגה של ${m(-st.left)}.</strong> כל הוצאה נוספת כאן — מעל התקציב.</p>`;
-      } else {
-        lines += `<p class="focus-line">נשארו <strong>${m(st.left)}</strong> · עד ${m(st.perDay, { round: true })} ליום${st.current ? ` · היום: ${st.todayLeft >= 0 ? `עוד ${m(st.todayLeft, { round: true })}` : `<span class="neg">חריגה של ${m(-st.todayLeft, { round: true })}</span>`}` : ''}</p>`;
-        if (st.willOverrun) lines += `<p class="focus-line warn-text">בקצב הזה: ${m(st.projected, { round: true })} עד סוף המחזור.</p>`;
-      }
-    } else {
-      lines += `<p class="focus-line">אין תקציב לקטגוריה הזו. <button type="button" class="link" data-act="set-focus-budget">לקבוע תקציב</button></p>`;
-    }
-    const tip = habit && habit.perWeek >= 1
-      ? `<p class="focus-tip">בממוצע ${m(habit.avg, { round: true })} לפעם, ${habit.perWeek.toFixed(1)} פעמים בשבוע. פעם אחת פחות בשבוע = <strong>${m(habit.yearlyIfOneLessPerWeek, { round: true })} בשנה</strong>.</p>`
-      : '';
-    parts.push(`<section class="focus" aria-labelledby="focus-name">
-      <div class="focus-row">
-        <h2 class="focus-name" id="focus-name">${esc(fc.name)}</h2>
-        <span class="focus-amt">${m(st.spent, { round: true })}${st.hasBudget ? ` <span class="of">/ ${m(st.budget, { round: true })}</span>` : ''}</span>
-      </div>
-      ${bar(st)}
-      ${lines}
-      ${tip}
-      <div class="focus-actions">
-        <button type="button" class="link" data-act="add" data-cat="${fc.id}">לרשום ${esc(fc.name)}</button>
-        <button type="button" class="link" data-act="resist" data-cat="${fc.id}">ויתרתי הפעם</button>
-      </div>
-    </section>`);
-  }
-
-  // Envelopes
-  const budgeted = sum.cats.filter((r) => r.status.hasBudget && (!fc || r.cat.id !== fc.id));
-  const unbudgeted = sum.cats.filter((r) => !r.status.hasBudget && r.status.spent > 0 && (!fc || r.cat.id !== fc.id));
-  if (budgeted.length || unbudgeted.length) {
+  // 3. The month's budget, by category (the focus category first)
+  const budgeted = sum.cats.filter((r) => r.status.hasBudget).sort((a, b) => (fc && a.cat.id === fc.id ? -1 : fc && b.cat.id === fc.id ? 1 : 0));
+  if (budgeted.length) {
     parts.push(`<section aria-labelledby="env-h">
-      <div class="sec-head"><h2 class="sec-title" id="env-h">מעטפות</h2><button type="button" class="link" data-act="settings">עריכת תקציבים</button></div>
+      <div class="home-head"><h2 class="home-title" id="env-h">התקציב החודשי</h2><button type="button" class="link small" data-act="settings">עריכה</button></div>
       <ul class="env-list">
         ${budgeted.map(({ cat, status: st }) => `<li class="env">
-          <button type="button" class="env-btn" data-act="ledger-cat" data-cat="${cat.id}" aria-label="${esc(cat.name)}: ${esc(money(st.spent))} מתוך ${esc(money(st.budget))}. פתיחה ביומן">
+          <button type="button" class="env-btn" data-act="ledger-cat" data-cat="${cat.id}" aria-label="${esc(cat.name)}: ${esc(money(st.spent))} מתוך ${esc(money(st.budget))}">
             <div class="env-top"><span class="env-name"><i class="dot" style="background:${cat.color}"></i>${esc(cat.name)}</span><span class="env-amt">${m(st.spent, { round: true })} <span class="of">/ ${m(st.budget, { round: true })}</span></span></div>
             ${bar(st)}
-            <p class="env-note ${st.state === 'over' ? 'is-over' : st.state === 'warn' ? 'is-warn' : ''}">${st.state === 'over' ? `חריגה של ${m(-st.left)}` : `נשארו ${m(st.left)}${st.reserved ? ` (אחרי ${m(st.reserved, { round: true })} קבועים)` : ''}`}</p>
-          </button>
-        </li>`).join('')}
-        ${unbudgeted.map(({ cat, status: st }) => `<li class="env">
-          <button type="button" class="env-btn" data-act="ledger-cat" data-cat="${cat.id}">
-            <div class="env-top"><span class="env-name"><i class="dot" style="background:${cat.color}"></i>${esc(cat.name)}</span><span class="env-amt">${m(st.spent, { round: true })}</span></div>
-            <p class="env-note">ללא תקציב</p>
+            <p class="env-note ${st.state === 'over' ? 'is-over' : st.state === 'warn' ? 'is-warn' : ''}">${st.state === 'over' ? `חריגה של ${m(-st.left)}` : `נשארו ${m(st.left, { round: true })}`}</p>
           </button>
         </li>`).join('')}
       </ul>
     </section>`);
   }
 
-  // Upcoming fixed charges
-  if (sum.upcoming.length) {
-    parts.push(`<section aria-labelledby="up-h">
-      <div class="sec-head"><h2 class="sec-title" id="up-h">חיובים קבועים בהמשך</h2></div>
-      <ul class="plain-list">${sum.upcoming.map((u) => `<li><span>${esc(u.item.name)} <span class="small muted">· ${esc(L.dayLabel(u.date))}</span></span>${m(u.item.amount)}</li>`).join('')}</ul>
-    </section>`);
-  }
+  // 4. Shortcuts
+  parts.push(`<section aria-label="קיצורי דרך"><div class="shortcuts">
+    <button type="button" class="shortcut" data-act="insights"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V12M10 20V6M15 20v-9M20 20V9"/></svg><span><strong>תובנות</strong><small>לאן הלך הכסף</small></span></button>
+    <button type="button" class="shortcut" data-act="report" data-start="${sum.cycle.start}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3.5h7l4 4V20a.5.5 0 0 1-.5.5h-10A.5.5 0 0 1 7 20z"/><path d="M10 12h5M10 15.5h5"/></svg><span><strong>הכנסות מול הוצאות</strong><small>החודש עד עכשיו</small></span></button>
+  </div></section>`);
 
-  // Recent
-  const recent = state.expenses.filter((e) => e.date <= t).sort(byNewest).slice(0, 5);
+  // 5. Latest entries
+  const recent = state.expenses.filter((e) => e.date <= t).sort(byNewest).slice(0, 4);
   if (recent.length) {
     parts.push(`<section aria-labelledby="rec-h" class="block-recent">
-      <div class="sec-head"><h2 class="sec-title" id="rec-h">אחרונות</h2><button type="button" class="link" data-act="tab" data-tab="ledger">לכל היומן</button></div>
+      <div class="home-head"><h2 class="home-title" id="rec-h">רישומים אחרונים</h2><button type="button" class="link small" data-act="tab" data-tab="ledger">הכל</button></div>
     </section>
     <ul class="rows">${recent.map((e) => expenseRow(e, t, true)).join('')}</ul>`);
   } else {
     parts.push(`<section class="empty">
-      <h2>הפנקס ריק</h2>
-      <p>רושמים כל הוצאה ברגע שהיא קורית — לוקח חמש שניות, ובסוף החודש יודעים בדיוק לאן הלך הכסף.</p>
-      <button type="button" class="btn btn-primary" data-act="add">לרשום הוצאה ראשונה</button>
+      <h2>עוד אין רישומים</h2>
+      <p>לוחצים על + ורושמים את ההוצאה הראשונה. לוקח חמש שניות.</p>
     </section>`);
   }
 
   // Backup reminder
   const daysSinceBackup = state.settings.lastBackupAt ? Math.floor((Date.now() - state.settings.lastBackupAt) / 86400000) : null;
   if (state.expenses.length >= 15 && (daysSinceBackup === null || daysSinceBackup > 30)) {
-    parts.push(`<div class="hint-box" style="margin-top:26px"><strong>${daysSinceBackup === null ? 'עוד לא גיבית' : `הגיבוי האחרון לפני ${daysSinceBackup} ימים`}</strong>הנתונים שמורים רק בטלפון הזה. <button type="button" class="link" data-act="backup">לשמור גיבוי עכשיו</button></div>`);
+    parts.push(`<div class="hint-box"><strong>${daysSinceBackup === null ? 'עוד לא גיבית' : `הגיבוי האחרון לפני ${daysSinceBackup} ימים`}</strong>הנתונים שמורים רק בטלפון הזה. <button type="button" class="link" data-act="backup">לשמור גיבוי</button></div>`);
   }
-
   // Install hint (iPhone Safari, not installed yet)
   if (isIOS() && !isStandalone() && !state.settings.installHintDismissed) {
-    parts.splice(1, 0, `<div class="hint-box" role="note"><strong>להוסיף למסך הבית</strong>בספארי: כפתור השיתוף (ריבוע עם חץ למעלה) ← ״הוספה למסך הבית״. כך פנקס נפתח כמו אפליקציה ושומר את הנתונים לתמיד.
-      <br><button type="button" class="link" data-act="dismiss-install">הבנתי</button></div>`);
+    parts.unshift(`<div class="hint-box" role="note"><strong>להוסיף למסך הבית</strong>בספארי: שיתוף ← ״הוספה למסך הבית״. <button type="button" class="link" data-act="dismiss-install">הבנתי</button></div>`);
   }
-
   return parts.join('');
 }
 
@@ -234,7 +196,7 @@ function expenseRow(e, t, showDate = false) {
     showDate ? esc(L.dayLabel(e.date, t)) : '',
   ].filter(Boolean).join(' · ');
   return `<li><button type="button" class="row-btn" data-act="edit" data-id="${e.id}" aria-label="${esc(title)}, ${esc(money(e.amount))}${c ? `, ${esc(c.name)}` : ''}. עריכה">
-    <span class="row-main"><span class="row-title">${esc(title)}</span><span class="row-sub">${sub}${e.spreadId ? ' <span class="tag">פריסה</span>' : e.recurringId ? ' <span class="tag">קבועה</span>' : ''}</span></span>
+    <span class="row-main"><span class="row-title">${esc(title)}</span><span class="row-sub">${sub}${e.pay ? ` · ${esc(L.payLabel(e.pay))}` : ''}${e.spreadId ? ' <span class="tag">פריסה</span>' : e.recurringId ? ' <span class="tag">קבועה</span>' : ''}</span></span>
     <span class="row-amt">${m(e.amount)}</span>
   </button></li>`;
 }
@@ -929,22 +891,30 @@ function render() {
   const cycle = L.cycleFor(t, state.settings.cycleDay);
   applyTheme();
 
-  // before the app proper: install guide -> intro slides -> 3 questions
-  const pre = ui.showInstall ? 'install' : !state.onboarded ? (ui.introDone ? 'onb' : 'intro') : null;
+  // before the app proper: install guide (shared link on a phone) -> the first question
+  if (!state.onboarded && !ui.showInstall && !ui.quiz) ui.quiz = { id: 'start', step: 0, answers: {} };
+  const pre = ui.showInstall ? 'install' : !state.onboarded ? 'quiz' : null;
   const onb = !!pre;
-  const sub = ui.settings ? 'settings' : ui.report ? 'report' : null;
+  const sub = ui.quiz ? 'quiz' : ui.settings ? 'settings' : ui.report ? 'report' : ui.insights ? 'insights' : null;
   $('#tabs').hidden = onb;
   $('#top').hidden = onb;
   const story = !onb && L.pendingStory(state, t);
   const fab = $('#story-fab');
-  fab.hidden = !story;
+  fab.hidden = !story || !!sub;
   if (story) {
     fab.dataset.start = story.start;
     $('#story-fab-label').textContent = `הסיכום של ${L.cycleLabel(story)}`;
   }
-  $('#btn-back').hidden = !sub;
+  // daily streak chip
+  const streak = L.streakCount(state.visits, t);
+  $('#streak-chip').hidden = onb || !!sub || !streak;
+  $('#streak-n').textContent = streak;
+  $('#streak-chip').setAttribute('aria-label', `רצף של ${streak} ימים. פתיחת לוח הרצף`);
+
+  $('#btn-back').hidden = !sub || sub === 'quiz' && !state.onboarded;
   $('#btn-settings').hidden = !!sub;
-  $('#brand').textContent = sub === 'settings' ? 'הגדרות' : sub === 'report' ? 'סיכום חודשי' : 'פנקס';
+  const titles = { settings: 'הגדרות', report: 'סיכום חודשי', insights: 'תובנות', quiz: 'הגדרת תקציב' };
+  $('#brand').textContent = titles[sub] || 'פנקס';
   $('#cycle-label').textContent = sub ? '' : `${L.cycleLabel(cycle)} · נשארו ${daysWord(L.dayDiff(t, cycle.end))}`;
   $('#cycle-label').hidden = !!sub;
 
@@ -953,16 +923,15 @@ function render() {
     else b.removeAttribute('aria-current');
   });
 
-  const key = pre === 'intro' ? `intro${ui.introStep}` : pre || sub || ui.tab;
+  const key = pre === 'install' ? 'install' : sub === 'quiz' ? `quiz-${ui.quiz.id}-${ui.quiz.step}` : sub || ui.tab;
   const html = pre === 'install' ? onboard.renderInstall({ fromShare: ui.fromShare })
-    : pre === 'intro' ? onboard.renderIntro(ui.introStep)
-    : pre === 'onb' ? renderOnboarding()
+    : sub === 'quiz' ? renderQuiz()
     : sub === 'settings' ? renderSettings()
     : sub === 'report' ? renderReport()
+    : sub === 'insights' ? renderInsights()
     : ui.tab === 'ledger' ? renderLedger()
     : ui.tab === 'save' ? renderSave()
     : ui.tab === 'invest' ? investUI.render()
-    : ui.tab === 'insights' ? renderInsights()
     : renderHome();
 
   // keep focus/caret in the ledger search while typing
@@ -986,24 +955,28 @@ function render() {
       if (caret != null && el.setSelectionRange) try { el.setSelectionRange(caret, caret); } catch {}
     }
   }
-  document.title = onb ? 'פנקס' : sub === 'settings' ? 'הגדרות · פנקס' : sub === 'report' ? 'סיכום חודשי · פנקס' : `${{ home: 'החודש', ledger: 'יומן', save: 'חיסכון', invest: 'השקעות', insights: 'תובנות' }[ui.tab]} · פנקס`;
+  const tabTitle = { home: 'ראשי', ledger: 'יומן', save: 'חיסכון', invest: 'השקעות' };
+  document.title = onb ? 'פנקס' : `${titles[sub] || tabTitle[ui.tab]} · פנקס`;
 
-  // motion after paint: piggy fill, count-ups (hero once per session, the rest on tab entry)
+  // motion after paint: piggy fill, count-ups (home once per session, other pages on entry)
   view.querySelectorAll('.piggy').forEach(settlePiggy);
-  if (pre === 'intro') onboard.afterIntroRender();
   const fresh = view.classList.contains('view-enter');
   if (key === 'home' && !ui.heroCounted) {
     ui.heroCounted = true;
-    FX.countAll(view.querySelector('.hero') || view, (v) => money(v, { round: true }), { duration: 1100 });
+    FX.countAll(view, (v) => money(v, { round: true }), { duration: 1100 });
   } else if (fresh && key !== 'home') {
     FX.countAll(view, (v) => money(v, { round: true }));
   }
+  // first visit to a page: its guide starts by itself
+  if (!onb && sub !== 'quiz') schedulePageTour(sub || ui.tab);
 }
 
 function go(tab) {
   ui.tab = tab;
   ui.settings = false;
   ui.report = null;
+  ui.insights = false;
+  if (state.onboarded) ui.quiz = null;
   render();
   window.scrollTo(0, 0);
   $('#view').focus({ preventScroll: true });
@@ -1180,6 +1153,7 @@ function openAdd({ catId, expense, income, kind } = {}) {
 
   add.catTouched = !!expense || !!catId; // an explicit category wins over place memory
   add.places = L.learnPlaces(state.expenses, state.placePrefs);
+  hidePay();
   setKind(income || kind === 'income' ? 'income' : 'expense');
   openDialog($('#sheet-add'));
   // focus the amount (not the note field) so the iOS keyboard doesn't cover the keypad
@@ -1299,7 +1273,8 @@ function submitAdd() {
     return;
   }
   if (add.kind === 'income') {
-    saveIncome(d);
+    if (add.editingId) saveIncome(d);
+    else askPay(d, null);
     return;
   }
   if (!catById(d.catId)) {
@@ -1314,7 +1289,8 @@ function submitAdd() {
     openOverCheck(d, imp);
     return;
   }
-  saveExpense(d, imp);
+  if (add.editingId) saveExpense(d, imp);
+  else askPay(d, imp);
 }
 
 function saveExpense(d, imp) {
@@ -1383,7 +1359,7 @@ $('#add-spread').addEventListener('click', () => {
 });
 
 function saveIncome(d) {
-  const data = { amount: d.amount, date: d.date, note: d.note, source: add.source };
+  const data = { amount: d.amount, date: d.date, note: d.note, source: add.source, ...(d.to ? { to: d.to } : {}) };
   let savedId = add.editingId;
   if (add.editingId) {
     const i = state.incomes.findIndex((x) => x.id === add.editingId);
@@ -1444,7 +1420,10 @@ function openOverCheck(d, imp) {
   $('#over-skip').focus();
 }
 $('#over-anyway').addEventListener('click', () => {
-  if (overDraft) saveExpense(overDraft.d, overDraft.imp);
+  if (overDraft) {
+    if (add.editingId) saveExpense(overDraft.d, overDraft.imp);
+    else askPay(overDraft.d, overDraft.imp);
+  }
   overDraft = null;
 });
 $('#over-skip').addEventListener('click', () => {
@@ -1872,7 +1851,8 @@ function openCheckIn(period = L.checkInStatus(state, today()).period) {
   const day = String(state.settings.checkInDay).padStart(2, '0');
   const existing = state.snapshots.find((s) => s.period === period);
   const prevSnap = state.snapshots.filter((s) => s.period < period).sort((a, b) => (a.period < b.period ? -1 : 1)).pop();
-  const prevAssets = L.snapshotAssets(prevSnap);
+  const live = L.liveBalances(state, today());
+  const prevAssets = prevSnap ? L.snapshotAssets(prevSnap) : live ? { checking: Math.max(0, live.checking), cash: Math.max(0, live.cash) } : {};
   const curAssets = existing ? L.snapshotAssets(existing) : null;
   // incomes already logged in the cycle of this check-in
   const logged = L.sumBy(L.incomesInCycle(state, L.cycleFor(`${period}-${day}`, state.settings.cycleDay)));
@@ -1915,6 +1895,7 @@ function openCheckIn(period = L.checkInStatus(state, today()).period) {
         if (v[`a_${a.key}__usd`]) usd[a.key] = v[`a_${a.key}__usd`];
       }
       state.settings.bank = v.bank || '';
+      state.balanceAnchor = { checking: assets.checking || 0, cash: assets.cash || 0, at: Date.now() };
       const snap = { id: existing?.id || L.uid(), period, date: existing?.date || `${period}-${day}`, income: v.income, assets, savedAt: Date.now() };
       if (Object.keys(usd).length) Object.assign(snap, { usd, usdRate: usdRate() });
       state.snapshots = [...state.snapshots.filter((s) => s.period !== period), snap];
@@ -2169,9 +2150,18 @@ const actions = {
   },
   'whats-new': () => showWhatsNew(true),
   tour: () => {
-    go('home');
-    onboard.startTour(() => {});
+    const page = ui.settings ? 'settings' : ui.insights ? 'insights' : ui.tab;
+    runPageTour(page, true);
   },
+  balances: () => openBalances(),
+  insights: () => {
+    ui.insights = true;
+    ui.settings = false;
+    ui.report = null;
+    render();
+    window.scrollTo(0, 0);
+  },
+  'quiz-budget': () => startQuiz('budget'),
   backup: () => backup(),
   restore: () => restorePick(),
   csv: () => shareOrDownload(`pinkas-${today()}.csv`, L.toCSV(state), 'text/csv'),
@@ -2191,6 +2181,11 @@ document.addEventListener('click', (ev) => {
     else ui.introDone = true;
     render();
     $('#view [data-intro="next"], #view input, #view .btn')?.focus({ preventScroll: true });
+    return;
+  }
+  const qzb = ev.target.closest('[data-quiz]');
+  if (qzb && ui.quiz) {
+    onQuizClick(qzb);
     return;
   }
   const inst = ev.target.closest('[data-install]');
@@ -2250,6 +2245,12 @@ $('#view').addEventListener('input', (ev) => {
 // Settings edits save in place without re-rendering, so focus/keyboard never jump.
 $('#view').addEventListener('change', (ev) => {
   const el = ev.target;
+  if (el.dataset.quizOther !== undefined && ui.quiz && el.value) {
+    const step = QUIZZES[ui.quiz.id].steps[ui.quiz.step];
+    ui.quiz.answers[step.key] = Number(el.value);
+    quizAdvance();
+    return;
+  }
   if (el.dataset.ledgerView !== undefined) {
     ui.ledgerView = el.value;
     ui.ledgerDay = null;
@@ -2365,8 +2366,7 @@ function showWhatsNew(force = false) {
     fields: [],
     submit: 'מעולה',
     onSubmit: () => {
-      // existing users who never had the tour get it once, right after "what's new"
-      if (!state.settings.tourDone) setTimeout(runTour, 350);
+      setTimeout(nextBoot, 300);
     },
   });
   return true;
@@ -2380,6 +2380,459 @@ function runTour() {
     persist();
     maybePromptCheckIn();
   });
+}
+
+/* =====================================================================
+   1.6 — questionnaires, payment method, balances, streak, guides
+   ===================================================================== */
+
+/* ---------- questionnaires: one question per screen, with "why we ask" ---------- */
+const QUIZZES = {
+  start: {
+    steps: [
+      {
+        kind: 'money',
+        title: 'כמה כסף יש לך עכשיו בעו״ש?',
+        why: 'זו נקודת ההתחלה. מכאן פנקס יוריד כל הוצאה ויוסיף כל הכנסה — ותמיד תדע כמה נשאר.',
+        fields: [
+          { name: 'checking', label: 'בעו״ש', placeholder: 'למשל 4,500', big: true },
+          { name: 'cash', label: 'ומזומן בארנק (לא חובה)', placeholder: '0' },
+        ],
+        bank: true,
+        next: 'מתחילים',
+      },
+    ],
+    finish: (a) => {
+      state.balanceAnchor = { checking: a.checking || 0, cash: a.cash || 0, at: Date.now() };
+      state.settings.bank = a.bank || '';
+      state.onboarded = true;
+      state.settings.lastSeenVersion = VERSION;
+      state.settings.tourDone = true;
+      state.settings.checkInPrompted = L.checkInStatus(state, today()).period; // no check-in right after this
+      recordVisit();
+      ui.quiz = null;
+      ui.welcomePending = true;
+      ui.tab = 'home';
+      commit();
+      nextBoot();
+    },
+  },
+  budget: {
+    steps: [
+      { kind: 'money', title: 'כמה כסף נכנס לך בחודש?', why: 'משכורת וכל הכנסה קבועה, נטו. ככה רואים כמה נשאר לחסוך.', fields: [{ name: 'income', label: 'הכנסה חודשית', placeholder: 'למשל 12,000' }] },
+      {
+        kind: 'money', title: 'כמה מותר לך להוציא בחודש?', why: 'מזה פנקס מחשב כמה מותר להוציא בכל יום. כלל אצבע: עד 80% מההכנסה, והשאר לחיסכון.',
+        fields: [{ name: 'total', label: 'תקציב חודשי', required: true }],
+        suggest: (a) => (a.income ? Math.round((a.income * 0.8) / 10000) * 10000 : 0),
+      },
+      {
+        kind: 'money', title: 'וכמה מזה על אוכל בחוץ?', why: 'מסעדות, משלוחים וקפה — המקום שהכי קל לחרוג בו. פנקס יעצור אותך רגע לפני.',
+        fields: [{ name: 'food', label: 'אוכל בחוץ בחודש' }],
+        suggest: (a) => (a.total ? Math.round((a.total * 0.1) / 10000) * 10000 : 60000),
+      },
+      {
+        kind: 'choice', key: 'day', title: 'באיזה יום נכנסת המשכורת?', why: 'החודש התקציבי שלך יתחיל ביום הזה — ככה התקציב מתאפס כשהכסף נכנס.',
+        options: [[1, 'ב־1 לחודש'], [10, 'ב־10 לחודש'], [15, 'ב־15 לחודש'], [25, 'ב־25 לחודש']],
+        other: true,
+      },
+    ],
+    finish: (a) => {
+      if (a.income) state.settings.income = a.income;
+      state.settings.monthlyBudget = a.total || 0;
+      const food = state.categories.find((c) => c.name === 'אוכל בחוץ');
+      if (food && a.food !== undefined) food.budget = a.food;
+      state.settings.cycleDay = L.clampCycleDay(a.day || 1);
+      ui.quiz = null;
+      commit();
+      window.scrollTo(0, 0);
+      toast('התקציב מוכן. מעכשיו רואים כאן כמה מותר להוציא כל יום.');
+    },
+  },
+};
+
+function startQuiz(id) {
+  const answers = id === 'budget'
+    ? { income: state.settings.income, total: state.settings.monthlyBudget, food: state.categories.find((c) => c.name === 'אוכל בחוץ')?.budget, day: state.settings.cycleDay }
+    : {};
+  ui.quiz = { id, step: 0, answers };
+  ui.settings = false;
+  ui.report = null;
+  ui.insights = false;
+  render();
+  window.scrollTo(0, 0);
+}
+
+function renderQuiz() {
+  const qz = ui.quiz;
+  const def = QUIZZES[qz.id];
+  const step = def.steps[qz.step];
+  const a = qz.answers;
+  const n = def.steps.length;
+  const head = qz.id === 'start'
+    ? `<div class="quiz-brand"><img src="icons/icon-192.png" alt="" width="44" height="44"><span>פנקס</span></div>`
+    : '';
+  let body = '';
+  if (step.kind === 'money') {
+    const sug = step.suggest ? step.suggest(a) : 0;
+    body = step.fields.map((f, i) => {
+      const v = a[f.name];
+      return `<div class="form-field"><label for="qz-${f.name}">${esc(f.label)}</label>
+        <div class="money-field ${f.big ? 'is-big' : ''}"><input class="field" id="qz-${f.name}" inputmode="decimal" autocomplete="off" value="${v ? v / 100 : ''}" placeholder="${esc(f.placeholder || (sug && i === 0 ? String(sug / 100) : '0'))}"><span class="cur" aria-hidden="true">${esc(cur())}</span></div></div>`;
+    }).join('');
+    if (sug) body += `<button type="button" class="quiz-suggest" data-quiz="suggest" data-value="${sug}">הצעה: ${m(sug, { round: true })}</button>`;
+    if (step.bank) {
+      body += `<div class="form-field"><label for="qz-bank">באיזה בנק? (לא חובה)</label>
+        <select id="qz-bank" class="field"><option value="">לא לבחור</option>${L.BANKS.map((b) => `<option value="${b.id}" ${a.bank === b.id ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></div>`;
+    }
+    body += `<p class="form-error" id="qz-error" role="alert"></p>
+      <button type="button" class="btn btn-primary quiz-next" data-quiz="next">${esc(step.next || (qz.step === n - 1 ? 'סיום' : 'המשך'))}</button>`;
+  } else {
+    body = `<div class="inv-options" role="radiogroup" aria-label="${esc(step.title)}">${step.options.map(([v, l]) => `
+      <button type="button" class="inv-option" role="radio" aria-checked="${Number(a[step.key]) === v}" data-quiz="pick" data-value="${v}"><span class="inv-option-l">${esc(l)}</span></button>`).join('')}</div>`;
+    if (step.other) {
+      body += `<div class="form-field"><label for="qz-other">יום אחר</label><select id="qz-other" class="field" data-quiz-other><option value="">בחירה…</option>${Array.from({ length: 28 }, (_, i) => `<option value="${i + 1}">${i + 1} בחודש</option>`).join('')}</select></div>`;
+    }
+  }
+  return `<section class="quiz">
+    ${head}
+    ${n > 1 ? `<div class="inv-progress" role="progressbar" aria-valuemin="1" aria-valuemax="${n}" aria-valuenow="${qz.step + 1}" aria-label="שאלה ${qz.step + 1} מתוך ${n}">${def.steps.map((_, i) => `<span class="${i <= qz.step ? 'on' : ''}"></span>`).join('')}</div>
+    <p class="eyebrow">שאלה ${qz.step + 1} מתוך ${n}</p>` : ''}
+    <h2 class="inv-q-title quiz-title">${esc(step.title)}</h2>
+    <p class="inv-why"><span>למה שואלים?</span> ${esc(step.why)}</p>
+    ${body}
+    ${qz.step > 0 || state.onboarded ? `<button type="button" class="link" data-quiz="back">${qz.step > 0 ? 'חזרה לשאלה הקודמת' : 'ביטול'}</button>` : ''}
+  </section>`;
+}
+
+function quizAdvance() {
+  const qz = ui.quiz;
+  const def = QUIZZES[qz.id];
+  if (qz.step < def.steps.length - 1) {
+    qz.step++;
+    render();
+    window.scrollTo(0, 0);
+    $('#view input, #view .inv-option')?.focus({ preventScroll: true });
+  } else def.finish(qz.answers);
+}
+
+function onQuizClick(b) {
+  const qz = ui.quiz;
+  const step = QUIZZES[qz.id].steps[qz.step];
+  const act = b.dataset.quiz;
+  if (act === 'back') {
+    if (qz.step > 0) { qz.step--; render(); } else go(ui.tab);
+    return;
+  }
+  if (act === 'suggest') {
+    const first = $(`#qz-${step.fields[0].name}`);
+    first.value = Number(b.dataset.value) / 100;
+    first.focus();
+    return;
+  }
+  if (act === 'pick') {
+    qz.answers[step.key] = Number(b.dataset.value);
+    FX.tick(8);
+    quizAdvance();
+    return;
+  }
+  if (act === 'next') {
+    for (const f of step.fields) {
+      const el = $(`#qz-${f.name}`);
+      const raw = el.value.trim();
+      const v = raw ? L.parseAmount(raw) : 0;
+      if (v === null) {
+        $('#qz-error').textContent = 'צריך מספר, למשל 4500 או 4,500.50';
+        el.setAttribute('aria-invalid', 'true');
+        el.focus();
+        return;
+      }
+      if (f.required && !v) {
+        $('#qz-error').textContent = `חסר סכום ב״${f.label}״.`;
+        el.focus();
+        return;
+      }
+      qz.answers[f.name] = v;
+    }
+    if (step.bank) qz.answers.bank = $('#qz-bank').value;
+    quizAdvance();
+  }
+}
+
+/* ---------- balances ---------- */
+function openBalances() {
+  const b = L.liveBalances(state, today());
+  openForm({
+    title: 'כמה יש לך עכשיו?',
+    intro: 'מה שרושמים כאן הופך לנקודת ההתחלה החדשה. מכאן כל הוצאה והכנסה יעדכנו את היתרה לבד.',
+    submit: 'שמירה',
+    fields: [
+      { name: 'checking', label: 'עו״ש', type: 'money', value: b ? Math.max(0, b.checking) : 0, hint: b && b.checking < 0 ? `לפי הרישומים: ${money(b.checking, { round: true })}` : '' },
+      { name: 'cash', label: 'מזומן', type: 'money', value: b ? Math.max(0, b.cash) : 0 },
+      { name: 'bank', label: 'הבנק', type: 'select', value: state.settings.bank, options: [['', 'לא נבחר'], ...L.BANKS.map((x) => [x.id, x.name])] },
+    ],
+    onSubmit: (v) => {
+      state.balanceAnchor = { checking: v.checking, cash: v.cash, at: Date.now() };
+      state.settings.bank = v.bank || '';
+      commit();
+      toast('היתרה עודכנה');
+    },
+  });
+}
+
+/* ---------- "where did the money come from?" step in the add sheet ---------- */
+let payDraft = null;
+function lastPayFor(note) {
+  const k = L.placeKey(note);
+  if (!k) return null;
+  const e = state.expenses.filter((x) => x.pay && L.placeKey(x.note) === k).sort(byNewest)[0];
+  return e ? e.pay : null;
+}
+function askPay(d, imp) {
+  payDraft = { d, imp };
+  closeDialog($('#sheet-over'));
+  const isIncome = add.kind === 'income';
+  const bal = L.liveBalances(state, today());
+  const after = (from) => {
+    if (!bal) return '';
+    const now = from === 'cash' ? bal.cash : bal.checking;
+    return `יישארו ${money(now + (isIncome ? d.amount : -d.amount), { round: true })}`;
+  };
+  const suggested = isIncome ? 'checking' : lastPayFor(d.note) || state.settings.lastPay || 'credit';
+  const ICON = {
+    credit: '<path d="M3.5 7h17v11h-17z"/><path d="M3.5 10.5h17M7 15h4"/>',
+    app: '<rect x="7" y="3" width="10" height="18" rx="2.5"/><path d="M11 18h2"/>',
+    cash: '<rect x="2.5" y="6.5" width="19" height="11" rx="2"/><circle cx="12" cy="12" r="2.6"/>',
+    transfer: '<path d="M4 9h14l-3.5-3.5M20 15H6l3.5 3.5"/>',
+    checking: '<path d="M3 9.5 12 4l9 5.5M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3.5 20h17"/>',
+  };
+  const tiles = isIncome
+    ? [{ key: 'checking', label: 'לעו״ש', from: 'checking' }, { key: 'cash', label: 'למזומן', from: 'cash' }]
+    : L.PAY_METHODS;
+  $('#pay-q').textContent = isIncome ? 'לאן נכנס הכסף?' : 'מאיפה ירד הכסף?';
+  $('#pay-amount').textContent = `${money(d.amount)} · ${isIncome ? add.source : d.note || catById(d.catId)?.name || ''}`;
+  $('#pay-grid').innerHTML = tiles.map((p) => `<button type="button" class="pay-tile${p.key === suggested ? ' is-suggested' : ''}" data-pay="${p.key}">
+      <svg viewBox="0 0 24 24" aria-hidden="true">${ICON[p.key]}</svg>
+      <span class="pay-l">${esc(p.label)}</span>
+      <span class="pay-s">${isIncome ? '' : p.from === 'cash' ? 'מהמזומן' : 'מהעו״ש'}${bal ? `${isIncome ? '' : ' · '}${esc(after(p.from))}` : ''}</span>
+    </button>`).join('');
+  $('#pay-note').textContent = !isIncome && suggested === lastPayFor(d.note) && d.note ? `בפעם הקודמת ב״${d.note}״ שילמת ב${L.payLabel(suggested)}.` : '';
+  $('#add-form').classList.add('is-paying');
+  $('#pay-step').hidden = false;
+  $(`#pay-grid [data-pay="${suggested}"]`)?.focus({ preventScroll: true });
+}
+$('#pay-grid').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-pay]');
+  if (!b || !payDraft) return;
+  const { d, imp } = payDraft;
+  payDraft = null;
+  FX.tick(10);
+  if (add.kind === 'income') {
+    d.to = b.dataset.pay === 'cash' ? 'cash' : undefined;
+    saveIncome(d);
+  } else {
+    d.pay = b.dataset.pay;
+    state.settings.lastPay = d.pay;
+    saveExpense(d, imp);
+  }
+  hidePay();
+});
+$('#pay-back').addEventListener('click', () => {
+  payDraft = null;
+  hidePay();
+  $('#add-amount').focus({ preventScroll: true });
+});
+function hidePay() {
+  $('#add-form').classList.remove('is-paying');
+  $('#pay-step').hidden = true;
+}
+
+/* ---------- daily streak ---------- */
+function recordVisit() {
+  const t = today();
+  if (state.visits.includes(t)) return false;
+  state.visits = [...state.visits, t].slice(-500);
+  persist();
+  return true;
+}
+
+// The piggy with its tail on fire — the reward for coming back
+function flamingPiggy(level = 0.3) {
+  return `<div class="fire-piggy">${piggySVG(level, { label: '' })}
+    <svg class="pig-flame" viewBox="0 0 40 60" aria-hidden="true">
+      <path class="pf-out" d="M20 2c2 10-6 14-9 22-3 7-1 16 4 21 3 3 7 5 10 5 9 0 14-8 13-17-1-7-5-11-8-15 0 5-2 8-5 10 1-9-1-17-5-26z"/>
+      <path class="pf-in" d="M21 30c-1 5-6 7-6 13 0 4 3 7 6 7 4 0 7-3 7-7 0-5-3-7-4-10-1 2-2 3-3 4 0-3 0-5 0-7z"/>
+    </svg></div>`;
+}
+
+function showStreakFx() {
+  const t = today();
+  const n = L.streakCount(state.visits, t);
+  const best = L.bestStreak(state.visits);
+  const d = $('#streak-fx');
+  $('#sfx-art').innerHTML = flamingPiggy(Math.min(1, 0.15 + n * 0.05));
+  $('#sfx-old').textContent = Math.max(0, n - 1);
+  $('#sfx-new').textContent = n;
+  $('#streak-fx-title').textContent = n === 1 ? 'יום ראשון ברצף' : `${n} ימים ברצף`;
+  $('#sfx-text').textContent = n === 1
+    ? 'כל יום שנכנסים לפנקס — הקופה מתחממת. נתראה מחר.'
+    : n >= best && n > 2 ? 'שיא חדש. ככה בונים הרגל.' : 'חזרת גם היום. עוד יום נוסף לרצף.';
+  state.settings.streakShown = t;
+  persist();
+  d.classList.remove('is-on');
+  openDialog(d);
+  requestAnimationFrame(() => requestAnimationFrame(() => d.classList.add('is-on')));
+  FX.tick(30);
+  $('#sfx-ok').focus({ preventScroll: true });
+}
+$('#sfx-ok').addEventListener('click', () => closeDialog($('#streak-fx')));
+$('#streak-fx').addEventListener('close', () => {
+  render();
+  setTimeout(nextBoot, 250);
+});
+
+let streakMonth = null;
+function openStreak(monthKey = L.monthKey(today())) {
+  streakMonth = monthKey;
+  const t = today();
+  const n = L.streakCount(state.visits, t);
+  const best = L.bestStreak(state.visits);
+  const mo = L.activityMonth(state, monthKey, t);
+  const isCur = monthKey === L.monthKey(t);
+  $('#streak-body').innerHTML = `
+    <div class="streak-top">
+      ${flamingPiggy(Math.min(1, 0.15 + n * 0.05))}
+      <div><p class="streak-big"><span class="num">${n}</span> <span>ימים ברצף</span></p>
+      <p class="small muted">השיא שלך: ${best} ימים</p></div>
+    </div>
+    <div class="cal-nav">
+      <button type="button" data-streak-month="${L.nextMonthKey(monthKey, -1)}" aria-label="לחודש הקודם">→</button>
+      <strong>${esc(L.monthLabelFromKey(monthKey))}</strong>
+      <button type="button" data-streak-month="${L.nextMonthKey(monthKey, 1)}" aria-label="לחודש הבא" ${isCur ? 'disabled' : ''}>←</button>
+    </div>
+    <div class="scal" role="list" aria-label="פעילות בחודש">
+      ${L.WEEKDAYS_SHORT.map((w) => `<span class="cal-wd" aria-hidden="true">${w}</span>`).join('')}
+      ${Array.from({ length: mo.firstDow }, () => '<span aria-hidden="true"></span>').join('')}
+      ${mo.days.map((d) => {
+        const day = Number(d.date.slice(8));
+        const logged = d.exp + d.inc;
+        const cls = d.future ? 'is-future' : d.opened ? 'is-open' : 'is-missed';
+        const label = `${day}: ${d.future ? 'עוד לא הגיע' : `${d.opened ? 'נכנסת' : 'לא נכנסת'}${logged ? `, ${d.exp ? `${d.exp} הוצאות` : ''}${d.exp && d.inc ? ' ו־' : ''}${d.inc ? `${d.inc} הכנסות` : ''}` : ', בלי רישומים'}`}`;
+        return `<span class="scal-day ${cls}${d.today ? ' is-today' : ''}" role="listitem" aria-label="${esc(label)}">${day}${logged && !d.future ? '<i class="scal-dot"></i>' : ''}</span>`;
+      }).join('')}
+    </div>
+    <div class="scal-legend" aria-hidden="true"><span><i class="lg-open"></i>נכנסת</span><span><i class="lg-miss"></i>לא נכנסת</span><span><i class="lg-dot"></i>היו רישומים</span></div>
+    <p class="block-p">${isCur ? 'החודש' : 'בחודש הזה'}: נכנסת ${mo.opened} ימים, פספסת ${mo.missed}${mo.empty ? `, ו־${mo.empty} ימים בלי אף רישום` : ''}.</p>`;
+  openDialog($('#sheet-streak'));
+}
+$('#streak-chip').addEventListener('click', () => openStreak());
+$('#streak-body').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-streak-month]');
+  if (b && !b.disabled) openStreak(b.dataset.streakMonth);
+});
+
+/* ---------- welcome popup (first run) ---------- */
+function showWelcome() {
+  ui.welcomePending = false;
+  openDialog($('#sheet-welcome'));
+  $('#welcome-go').focus({ preventScroll: true });
+}
+$('#welcome-go').addEventListener('click', () => {
+  closeDialog($('#sheet-welcome'));
+  go('home');
+  setTimeout(() => runPageTour('home', true), 300);
+});
+$('#welcome-skip').addEventListener('click', () => {
+  state.settings.toursSeen.home = true;
+  persist();
+  closeDialog($('#sheet-welcome'));
+  setTimeout(nextBoot, 250);
+});
+
+/* ---------- per-page guides: most important first; the first 3 can't be skipped ---------- */
+const PAGE_TOURS = {
+  home: [
+    { sel: '.balances', title: 'היתרה שלך', text: 'כמה כסף יש לך עכשיו בעו״ש ובמזומן. כל הוצאה והכנסה שתרשום מעדכנת את זה לבד.' },
+    { sel: '#btn-add', title: 'רישום הוצאה או הכנסה', text: 'הכפתור הכי חשוב. קנית משהו? לוחצים כאן, מקלידים סכום, ובוחרים מאיפה שילמת.' },
+    { sel: '.hero, .budget-cta', title: 'כמה מותר היום', text: 'כמה אפשר להוציא היום כדי לסיים את החודש בתקציב. אין תקציב? 3 שאלות ומגדירים.' },
+    { sel: '.env-list', title: 'התקציב לפי קטגוריה', text: 'כל קטגוריה עם הפס שלה. הקו הקטן מראה איפה כדאי להיות היום.' },
+    { sel: '.shortcuts', title: 'תובנות ודוח', text: 'לאן הלך הכסף, ואיך החודש נראה מול ההכנסות.' },
+    { sel: '#streak-chip', title: 'הרצף שלך', text: 'כל יום שנכנסים — עוד יום ברצף. לחיצה מראה לוח של כל החודש.' },
+    { sel: '[data-tab="ledger"]', title: 'יומן', text: 'כל הרישומים, עם חיפוש ולוח חודשי.' },
+    { sel: '[data-tab="save"]', title: 'חיסכון', text: 'קופת החזיר למטרה, ומפת כל הכסף שלך.' },
+    { sel: '[data-tab="invest"]', title: 'השקעות', text: 'שאלון קצר, השוואת עמלות ובדיקת פנסיה.' },
+    { sel: '#btn-settings', title: 'הגדרות', text: 'תקציבים, הוראות קבע, גיבוי ושיתוף לחבר.' },
+  ],
+  ledger: [
+    { sel: '.ledger-sum', title: 'החודש במספרים', text: 'כמה נכנס, כמה יצא, ומה נשאר.' },
+    { sel: '#ledger-results .row-btn, #ledger-results .empty', title: 'כל רישום', text: 'לחיצה על שורה פותחת עריכה או מחיקה.' },
+    { sel: '.ledger-tools', title: 'רשימה או לוח', text: 'בלוח החודשי רואים כמה יצא בכל יום. לחיצה על יום מציגה רק אותו.' },
+    { sel: '.filters', title: 'חיפוש וסינון', text: 'מחפשים לפי מקום או סכום, או מסננים לקטגוריה אחת.' },
+    { sel: '.cycle-nav', title: 'חודשים קודמים', text: 'החצים עוברים בין חודשים.' },
+  ],
+  save: [
+    { sel: '.piggy-box', title: 'קופת החיסכון', text: 'בוחרים מטרה ומפקידים אליה. הקופה מתמלאת — וכשמגיעים ליעד היא מתפוצצת.' },
+    { sel: '.nw', title: 'מפת הכסף', text: 'כל הכסף שלך: עו״ש, השקעות, פנסיה והשתלמות. מתעדכן בצ׳ק־אין החודשי.' },
+    { sel: '.save-intro .btn', title: 'ויתרתי על משהו', text: 'לא קנית משהו שרצית? רושמים כאן, וזה נספר ככסף שנשאר אצלך.' },
+    { sel: '#goals-h', title: 'מטרות', text: 'כמה מטרות במקביל — טיסה, מחשב, כרית ביטחון.' },
+    { sel: '#wish-h', title: 'רשימת המתנה', text: 'רוצה לקנות משהו לא מתוכנן? מחכים 48 שעות. רוב הדחפים עוברים.' },
+    { sel: '#cal-h', title: 'ימים בלי הוצאות', text: 'כל יום בלי הוצאה נצבע בירוק.' },
+  ],
+  invest: [
+    { sel: '.inv-options, .inv-chips', title: 'מתחילים כאן', text: 'בוחרים מה המצב שלך עם השקעות, ופנקס מתאים את העמוד אליך.' },
+    { sel: '.inv-steps, #inv-notes-h', title: 'מה מקבלים', text: 'שאלון קצר, מה חשוב לדעת, והשוואת עלויות לפי הסכומים שלך.' },
+    { sel: '.inv-disclaimer', title: 'מידע, לא ייעוץ', text: 'פנקס עוזר להבין עלויות ואפשרויות. החלטה על השקעה — מול בעל רישיון.' },
+    { sel: '.glossary', title: 'מילון', text: 'לא בטוח מה זה קרן סל או דמי משמרת? הכל כאן.' },
+  ],
+  insights: [
+    { sel: '#tips-h', title: 'איפה אפשר להשתפר', text: 'עד 3 דברים שהכי כדאי לשנות החודש, עם הסכום שאפשר לחסוך.' },
+    { sel: '#sh-h', title: 'לאן הלך הכסף', text: 'כל קטגוריה, והחלק שלה מסך ההוצאות.' },
+    { sel: '#rep-h, #ch-h', title: 'חודשים קודמים', text: 'סיכום לכל חודש, והשוואה לחודשים שעברו.' },
+  ],
+  settings: [
+    { sel: '#sb-h', title: 'תקציבים', text: 'סכום חודשי לכל קטגוריה. ריק = רק מעקב.' },
+    { sel: '#recurring-section', title: 'הוראות קבע', text: 'חיובים שנרשמים לבד כל חודש — שכירות, מנויים.' },
+    { sel: '#sd-h', title: 'גיבוי', text: 'הנתונים שמורים רק בטלפון. כדאי לגבות פעם בחודש.' },
+  ],
+};
+
+function busy() {
+  return onboard.tourActive() || $$('dialog').some((d) => d.open) || ui.welcomePending;
+}
+function runPageTour(key, force = false) {
+  const steps = PAGE_TOURS[key];
+  if (!steps || (!force && state.settings.toursSeen[key]) || onboard.tourActive()) return false;
+  onboard.startTour(steps, {
+    mandatory: 3,
+    onEnd: () => {
+      state.settings.toursSeen[key] = true;
+      persist();
+      setTimeout(nextBoot, 250);
+    },
+  });
+  return true;
+}
+let tourTimer = null;
+function schedulePageTour(key) {
+  if (!state.onboarded || state.settings.toursSeen[key] || !PAGE_TOURS[key]) return;
+  clearTimeout(tourTimer);
+  tourTimer = setTimeout(() => {
+    const now = ui.settings ? 'settings' : ui.insights ? 'insights' : ui.report || ui.quiz ? null : ui.tab;
+    if (now !== key || busy()) return;
+    runPageTour(key);
+  }, 650);
+}
+
+/* ---------- startup: one thing at a time ---------- */
+// welcome -> what's new -> this page's guide -> today's streak -> monthly check-in
+function nextBoot() {
+  if (!state.onboarded || ui.showInstall) return;
+  if (onboard.tourActive() || $$('dialog').some((d) => d.open)) return;
+  if (ui.welcomePending) return showWelcome();
+  if (showWhatsNew()) return;
+  const page = ui.settings ? 'settings' : ui.insights ? 'insights' : ui.report || ui.quiz ? null : ui.tab;
+  if (page && runPageTour(page)) return;
+  if (state.settings.streakShown !== today() && state.visits.includes(today())) return showStreakFx();
+  maybePromptCheckIn();
 }
 
 /* ---------- modules ---------- */
@@ -2446,8 +2899,9 @@ let lastDay = today();
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && today() !== lastDay) {
     lastDay = today();
+    if (state.onboarded) recordVisit();
     refreshDay();
-    maybePromptCheckIn();
+    nextBoot();
   } else if (document.visibilityState === 'visible' && ui.tab === 'save' && !ui.settings) {
     render(); // wishlist timers
   }
@@ -2482,9 +2936,10 @@ const params = new URLSearchParams(location.search);
 if (state.onboarded && (params.get('action') === 'add' || location.hash === '#add')) {
   history.replaceState(null, '', location.pathname);
   openAdd();
-} else if (!showWhatsNew()) {
-  if (state.onboarded && !state.settings.tourDone && !ui.showInstall) setTimeout(runTour, 600);
-  else maybePromptCheckIn();
+} else {
+  if (state.onboarded && !ui.showInstall) recordVisit();
+  render();
+  setTimeout(nextBoot, 700);
 }
 
 // expose for debugging in the console only

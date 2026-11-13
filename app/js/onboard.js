@@ -24,6 +24,16 @@ export function isStandalone() {
 
 export const CHANGELOG = [
   {
+    v: '1.6.0',
+    items: [
+      'אחרי ״לרשום״: בוחרים מאיפה ירד הכסף — אשראי, ביט/פייבוקס, מזומן או העברה. היתרה בעו״ש ובמזומן מתעדכנת לבד.',
+      'רצף יומי: כל יום שנכנסים — עוד יום ברצף, עם לוח שמראה ימים שפספסת.',
+      'מסך ראשי ברור יותר: היתרה, כמה מותר היום, והתקציב.',
+      'הגדרת תקציב בשאלון קצר, שאלה אחת בכל מסך.',
+      'בכל עמוד, בכניסה הראשונה: הדרכה קצרה על הדברים החשובים.',
+    ],
+  },
+  {
     v: '1.5.0',
     items: [
       'השקעות בדולרים: לוחצים $ ליד השדה בצ׳ק־אין, והסכום מומר לשקלים לפי שער הדולר היומי.',
@@ -193,79 +203,91 @@ export function createOnboarding(api) {
   }
 
   /* ---------- guided tour ---------- */
-  const TOUR = [
-    { sel: '.hero', text: 'כמה מותר להוציא היום. מתעדכן אחרי כל הוצאה.' },
-    { sel: '#btn-add', text: 'כאן רושמים הוצאה או הכנסה.' },
-    { sel: '[data-tab="save"]', text: 'קופת החיסכון, המטרות ומפת הכסף שלך.' },
-    { sel: '[data-tab="invest"]', text: 'השקעות: השוואת עמלות ובדיקת דמי ניהול בפנסיה.' },
-    { sel: '#btn-settings', text: 'תקציבים, תזכורת ביומן ושיתוף לחבר.' },
-  ];
-  let tourIdx = 0;
-  let tourEl = null;
-  let onTourEnd = null;
+  /* ---------- guided tour (one per page) ----------
+     steps: [{ sel, title, text }], ordered from most to least important.
+     The first `mandatory` steps can't be skipped; after that "דילוג" appears, but "הבא" keeps going. */
+  let tour = null;
 
-  function startTour(done) {
-    onTourEnd = done;
-    tourIdx = 0;
-    tourEl = document.createElement('div');
-    tourEl.className = 'tour';
-    tourEl.setAttribute('role', 'dialog');
-    tourEl.setAttribute('aria-modal', 'true');
-    tourEl.setAttribute('aria-label', 'סיור קצר');
-    tourEl.innerHTML = `<div class="tour-hole"></div>
-      <div class="tour-card"><p class="tour-step"></p><p class="tour-text"></p>
-        <div class="tour-actions"><button type="button" class="btn btn-gold btn-small" data-tour="next">הבא</button><button type="button" class="link link-on-dark" data-tour="end">דילוג</button></div></div>`;
-    document.body.appendChild(tourEl);
-    tourEl.addEventListener('click', (e) => {
+  function startTour(steps, { mandatory = 3, onEnd } = {}) {
+    if (tour) return;
+    const list = steps.filter((st) => document.querySelector(st.sel));
+    if (!list.length) { onEnd?.(); return; }
+    const el = document.createElement('div');
+    el.className = 'tour';
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-modal', 'true');
+    el.setAttribute('aria-labelledby', 'tour-title');
+    el.innerHTML = `<div class="tour-hole"></div>
+      <div class="tour-card"><p class="tour-step"></p><h2 class="tour-title" id="tour-title"></h2><p class="tour-text"></p>
+        <div class="tour-actions"><button type="button" class="btn btn-gold btn-small" data-tour="next">הבא</button><button type="button" class="link link-on-dark" data-tour="end">דילוג על ההמשך</button></div></div>`;
+    document.body.appendChild(el);
+    tour = { el, list, idx: 0, mandatory: Math.min(mandatory, list.length), onEnd };
+    el.addEventListener('click', (e) => {
       const b = e.target.closest('[data-tour]');
       if (!b) return;
       if (b.dataset.tour === 'end') endTour();
       else nextTour();
     });
-    tourEl.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') endTour();
-      if (e.key === 'Tab') { e.preventDefault(); tourEl.querySelector('[data-tour="next"]').focus(); }
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && tour.idx >= tour.mandatory) endTour();
+      if (e.key === 'Escape') e.preventDefault();
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const btns = [...el.querySelectorAll('button:not([hidden])')];
+        const i = btns.indexOf(document.activeElement);
+        btns[(i + 1) % btns.length].focus();
+      }
     });
     window.addEventListener('resize', placeTour);
     showTour();
   }
   function showTour() {
-    const step = TOUR[tourIdx];
+    const { el, list, idx, mandatory } = tour;
+    const step = list[idx];
     const target = document.querySelector(step.sel);
     if (!target) return nextTour();
     target.scrollIntoView({ block: 'center', behavior: reduced() ? 'auto' : 'smooth' });
-    tourEl.querySelector('.tour-step').textContent = `${tourIdx + 1} מתוך ${TOUR.length}`;
-    tourEl.querySelector('.tour-text').textContent = step.text;
-    tourEl.querySelector('[data-tour="next"]').textContent = tourIdx === TOUR.length - 1 ? 'סיום' : 'הבא';
-    setTimeout(placeTour, reduced() ? 0 : 280);
-    tourEl.querySelector('[data-tour="next"]').focus({ preventScroll: true });
+    el.querySelector('.tour-step').textContent = `${idx + 1} מתוך ${list.length}${idx < mandatory ? ' · חשוב' : ''}`;
+    el.querySelector('.tour-title').textContent = step.title;
+    el.querySelector('.tour-text').textContent = step.text;
+    el.querySelector('[data-tour="next"]').textContent = idx === list.length - 1 ? 'הבנתי' : 'הבא';
+    // the most important steps can't be skipped
+    el.querySelector('[data-tour="end"]').hidden = idx < mandatory || idx === list.length - 1;
+    el.querySelector('.tour-card').classList.remove('tour-in');
+    void el.offsetWidth;
+    el.querySelector('.tour-card').classList.add('tour-in');
+    setTimeout(placeTour, reduced() ? 0 : 300);
+    el.querySelector('[data-tour="next"]').focus({ preventScroll: true });
   }
   function placeTour() {
-    if (!tourEl) return;
-    const target = document.querySelector(TOUR[tourIdx].sel);
+    if (!tour) return;
+    const target = document.querySelector(tour.list[tour.idx].sel);
     if (!target) return;
     const r = target.getBoundingClientRect();
-    const pad = 8;
-    const hole = tourEl.querySelector('.tour-hole');
+    const pad = 6;
+    const hole = tour.el.querySelector('.tour-hole');
     Object.assign(hole.style, { top: `${r.top - pad}px`, left: `${r.left - pad}px`, width: `${r.width + pad * 2}px`, height: `${r.height + pad * 2}px` });
-    const card = tourEl.querySelector('.tour-card');
-    const below = r.bottom + 16 + 150 < innerHeight;
-    card.style.top = below ? `${r.bottom + 16}px` : '';
-    card.style.bottom = below ? '' : `${innerHeight - r.top + 16}px`;
+    const card = tour.el.querySelector('.tour-card');
+    const below = r.bottom + 16 + 170 < innerHeight;
+    card.style.top = below ? `${Math.max(12, r.bottom + 14)}px` : '';
+    card.style.bottom = below ? '' : `${Math.max(12, innerHeight - r.top + 14)}px`;
   }
   function nextTour() {
-    if (tourIdx < TOUR.length - 1) {
-      tourIdx++;
+    if (tour.idx < tour.list.length - 1) {
+      tour.idx++;
       showTour();
     } else endTour();
   }
   function endTour() {
+    if (!tour) return;
+    const done = tour.onEnd;
     window.removeEventListener('resize', placeTour);
-    tourEl?.remove();
-    tourEl = null;
+    tour.el.remove();
+    tour = null;
     window.scrollTo(0, 0);
-    onTourEnd?.();
+    done?.();
   }
+  const tourActive = () => !!tour;
 
-  return { renderIntro, afterIntroRender, introLength: SLIDES.length, renderInstall, onInstallClick, share, startTour };
+  return { renderIntro, afterIntroRender, introLength: SLIDES.length, renderInstall, onInstallClick, share, startTour, tourActive };
 }
