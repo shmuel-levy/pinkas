@@ -53,6 +53,7 @@ export function defaultState() {
     snapshots: [],
     placePrefs: {},
     spreads: [],
+    incomes: [],
   };
 }
 
@@ -172,7 +173,18 @@ export function normalize(raw) {
       createdAt: Number.isFinite(x.createdAt) ? x.createdAt : Date.now(),
     }));
 
-  return { schema: SCHEMA, onboarded: raw.onboarded !== false, settings, categories, expenses, recurring, goals, wishlist, resisted, snapshots, placePrefs, spreads };
+  const incomes = (Array.isArray(raw.incomes) ? raw.incomes : [])
+    .filter((x) => isObj(x) && isInt(x.amount) && x.amount > 0 && isDate(x.date))
+    .map((x) => ({
+      id: String(x.id || uid()),
+      amount: x.amount,
+      date: x.date,
+      source: str(x.source, 30) || 'אחר',
+      note: str(x.note, 80),
+      createdAt: Number.isFinite(x.createdAt) ? x.createdAt : Date.now(),
+    }));
+
+  return { schema: SCHEMA, onboarded: raw.onboarded !== false, settings, categories, expenses, recurring, goals, wishlist, resisted, snapshots, placePrefs, spreads, incomes };
 }
 
 export function load(storage = globalThis.localStorage) {

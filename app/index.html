@@ -57,7 +57,7 @@
     <nav class="tabs" id="tabs" aria-label="ניווט ראשי">
       <button type="button" data-tab="home">החודש</button>
       <button type="button" data-tab="ledger">יומן</button>
-      <button type="button" class="tab-add" id="btn-add" aria-label="הוספת הוצאה"><span aria-hidden="true">+</span> הוצאה</button>
+      <button type="button" class="tab-add" id="btn-add" aria-label="רישום חדש"><span aria-hidden="true">+</span> רישום</button>
       <button type="button" data-tab="save">חיסכון</button>
       <button type="button" data-tab="insights">תובנות</button>
     </nav>
@@ -69,6 +69,11 @@
       <div class="sheet-head">
         <h2 id="add-title">הוצאה חדשה</h2>
         <button type="button" class="link" data-close>ביטול</button>
+      </div>
+
+      <div class="kind seg" id="add-kind" role="radiogroup" aria-label="סוג הרישום">
+        <label><input type="radio" name="kind" value="expense" checked><span>הוצאה</span></label>
+        <label><input type="radio" name="kind" value="income"><span>הכנסה</span></label>
       </div>
 
       <div class="amount-wrap">
@@ -87,10 +92,23 @@
         <p class="place-hint" id="place-hint" aria-live="polite"></p>
       </div>
 
-      <fieldset class="cats">
+      <fieldset class="cats" id="add-cats-wrap">
         <legend class="sr-only">קטגוריה</legend>
         <div class="cat-list" id="add-cats"></div>
       </fieldset>
+      <fieldset class="cats" id="add-sources-wrap" hidden>
+        <legend class="sr-only">מקור ההכנסה</legend>
+        <div class="cat-list" id="add-sources"></div>
+      </fieldset>
+
+      <div class="standing" id="standing" hidden>
+        <p class="standing-q" id="standing-q">זה יורד כל חודש? (הוראת קבע)</p>
+        <div class="standing-opts" id="standing-opts" role="group" aria-labelledby="standing-q">
+          <button type="button" data-standing="yes" aria-pressed="false">כן, כל חודש</button>
+          <button type="button" data-standing="no" aria-pressed="false">לא, חד־פעמי</button>
+        </div>
+      </div>
+      <button type="button" class="link small standing-open" id="standing-open" hidden>חוזר כל חודש? (הוראת קבע)</button>
 
       <div class="keypad" id="keypad" role="group" aria-label="מקלדת סכום">
         <button type="button" data-key="1">1</button>

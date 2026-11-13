@@ -427,11 +427,12 @@ export function formatWait(ms) {
 export function toCSV(state) {
   const cats = Object.fromEntries(state.categories.map((c) => [c.id, c.name]));
   const q = (s) => `"${String(s ?? '').replace(/"/g, '""')}"`;
-  const rows = [['תאריך', 'קטגוריה', 'סכום', 'פירוט', 'קבועה'].map(q).join(',')];
-  const sorted = [...state.expenses].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
-  for (const e of sorted) {
-    rows.push([e.date, cats[e.catId] || '', (e.amount / 100).toFixed(2), e.note || '', e.recurringId ? 'כן' : ''].map(q).join(','));
-  }
+  const rows = [['תאריך', 'סוג', 'קטגוריה', 'סכום', 'פירוט', 'קבועה'].map(q).join(',')];
+  const all = [
+    ...state.expenses.map((e) => [e.date, 'הוצאה', cats[e.catId] || '', (e.amount / 100).toFixed(2), e.note || '', e.recurringId ? 'כן' : '']),
+    ...(state.incomes || []).map((i) => [i.date, 'הכנסה', i.source || '', (i.amount / 100).toFixed(2), i.note || '', '']),
+  ].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+  for (const r of all) rows.push(r.map(q).join(','));
   return '\uFEFF' + rows.join('\r\n');
 }
 
@@ -532,11 +533,104 @@ export function monthLabelFromKey(key) {
   return `${MONTHS[m - 1]} ${y}`;
 }
 
-// Income of a cycle = income reported in check-ins dated inside that cycle; otherwise the income setting.
+// Income of a cycle, most deliberate source first:
+// 1. the monthly check-in, 2. income entries logged during the cycle, 3. the income setting.
 export function incomeForCycle(state, cycle) {
   const snaps = (state.snapshots || []).filter((s) => inCycle(s.date, cycle) && s.income);
   if (snaps.length) return { amount: snaps.reduce((t, s) => t + s.income, 0), source: 'checkin' };
+  const logged = incomesInCycle(state, cycle);
+  if (logged.length) return { amount: sumBy(logged), source: 'entries' };
   return state.settings.income ? { amount: state.settings.income, source: 'setting' } : { amount: 0, source: 'none' };
+}
+
+/* ---------- income entries ---------- */
+export const INCOME_SOURCES = ['משכורת', 'עבודה נוספת', 'החזר או זיכוי', 'מתנה', 'אחר'];
+
+export function incomesInCycle(state, cycle) {
+  return (state.incomes || []).filter((i) => inCycle(i.date, cycle));
+}
+
+// Per-day totals for the calendar view
+export function dailyTotals(state, cycle) {
+  const map = new Map();
+  const get = (d) => {
+    if (!map.has(d)) map.set(d, { spent: 0, income: 0, count: 0 });
+    return map.get(d);
+  };
+  for (const e of expensesInCycle(state.expenses, cycle)) {
+    const x = get(e.date);
+    x.spent += e.amount;
+    x.count++;
+  }
+  for (const i of incomesInCycle(state, cycle)) {
+    const x = get(i.date);
+    x.income += i.amount;
+    x.count++;
+  }
+  return map;
+}
+
+// Where the money went: one row per category, largest first
+export function categoryShares(state, cycle) {
+  const exps = expensesInCycle(state.expenses, cycle);
+  const total = sumBy(exps);
+  return state.categories
+    .map((c) => {
+      const amount = sumBy(exps, (e) => e.catId === c.id);
+      return { cat: c, amount, share: total ? amount / total : 0 };
+    })
+    .filter((r) => r.amount > 0)
+    .sort((a, b) => b.amount - a.amount);
+}
+
+/* ---------- standing orders (הוראת קבע) ---------- */
+// Names that are almost always monthly charges
+export const SUBSCRIPTION_HINTS = [
+  'נטפליקס', 'netflix', 'ספוטיפיי', 'spotify', 'אפל', 'apple', 'icloud', 'אייקלאוד', 'יוטיוב', 'youtube',
+  'דיסני', 'disney', 'אמזון פריים', 'prime', 'hbo', 'chatgpt', 'openai', 'claude', 'גוגל וואן', 'google one',
+  'חדר כושר', 'כושר', 'gym', 'הוט', 'סלקום', 'cellcom', 'פרטנר', 'partner', 'פלאפון',
+  'pelephone', 'בזק', 'bezeq', 'גולן טלקום', '012', 'מנוי', 'subscription', 'וולט+', 'wolt+', 'דרופבוקס', 'dropbox',
+  'אדובי', 'adobe', 'microsoft', 'מיקרוסופט', 'canva', 'קנבה', 'duolingo', 'דואולינגו', 'xbox', 'playstation', 'פלייסטיישן',
+];
+
+// whole-word match, so "hotdog" or "Yes Planet" don't look like subscriptions
+function hasHint(key) {
+  const text = ` ${key.replace(/[^\p{L}\p{N}+]+/gu, ' ')} `;
+  return SUBSCRIPTION_HINTS.some((h) => text.includes(` ${h} `));
+}
+
+/**
+ * Should the add sheet ask "is this a monthly standing order?"
+ * Returns { ask, reason, existing }.
+ */
+export function standingOrderHint(state, { note, catId, amount }) {
+  const key = placeKey(note);
+  const existing = key ? (state.recurring || []).find((r) => r.active && placeKey(r.name) === key) || null : null;
+  if (existing) return { ask: false, reason: 'exists', existing };
+  const cat = state.categories.find((c) => c.id === catId);
+  if (cat && /מנוי/.test(cat.name)) return { ask: true, reason: 'category', existing: null };
+  if (key && hasHint(key)) return { ask: true, reason: 'keyword', existing: null };
+  // same place, same amount, in two different months already
+  if (key && amount) {
+    const months = new Set(state.expenses.filter((e) => !e.recurringId && placeKey(e.note) === key && e.amount === amount).map((e) => monthKey(e.date)));
+    if (months.size >= 2) return { ask: true, reason: 'pattern', existing: null };
+  }
+  return { ask: false, reason: null, existing: null };
+}
+
+// Turns a just-recorded expense into a recurring item. This month is already paid (the expense itself),
+// so generation continues from next month.
+export function recurringFromExpense({ note, amount, catId, date }, id = uid()) {
+  return {
+    id,
+    name: String(note || '').trim() || 'הוראת קבע',
+    amount,
+    catId,
+    day: Number(date.slice(8, 10)),
+    startMonth: monthKey(date),
+    lastMonth: monthKey(date),
+    active: true,
+  };
 }
 
 /* ---------- improvement tips ---------- */

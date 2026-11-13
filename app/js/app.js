@@ -1,7 +1,7 @@
 import * as L from './logic.js';
 import * as S from './store.js';
 
-const VERSION = '1.2.0';
+const VERSION = '1.3.0';
 
 /* ---------- state ---------- */
 let state = S.load();
@@ -10,6 +10,8 @@ const ui = {
   settings: false,
   report: null, // start date of the cycle whose report is open
   ledgerOffset: 0,
+  ledgerView: 'list', // 'list' | 'cal'
+  ledgerDay: null, // a day picked in the calendar
   ledgerQuery: '',
   ledgerCat: '',
   lastRenderedTab: null,
@@ -228,14 +230,39 @@ function ledgerCycle() {
   return L.shiftCycle(L.cycleFor(today(), state.settings.cycleDay), ui.ledgerOffset);
 }
 
+function incomeRow(i, t, showDate = false) {
+  const title = i.note || i.source;
+  return `<li><button type="button" class="row-btn" data-act="edit-income" data-id="${i.id}" aria-label="הכנסה: ${esc(title)}, ${esc(money(i.amount))}. עריכה">
+    <span class="row-main"><span class="row-title">${esc(title)}</span><span class="row-sub"><span class="tag tag-in">הכנסה</span> ${esc(i.source)}${showDate ? ` · ${esc(L.dayLabel(i.date, t))}` : ''}</span></span>
+    <span class="row-amt pos">${m(i.amount, { signed: true })}</span>
+  </button></li>`;
+}
+
 function renderLedger() {
   const cycle = ledgerCycle();
+  const exps = L.expensesInCycle(state.expenses, cycle).filter((e) => e.date <= today() || ui.ledgerOffset < 0);
+  const incs = L.incomesInCycle(state, cycle);
+  const spent = L.sumBy(exps);
+  const earned = L.sumBy(incs);
   const catOptions = state.categories.map((c) => `<option value="${c.id}" ${ui.ledgerCat === c.id ? 'selected' : ''}>${esc(c.name)}${c.archived ? ' (בארכיון)' : ''}</option>`).join('');
+  const view = ui.ledgerView;
   return `<div class="cycle-nav">
       <button type="button" data-act="ledger-prev" aria-label="למחזור הקודם">→</button>
       <div class="cycle-nav-label" aria-live="polite"><strong>${esc(L.cycleLabel(cycle))}</strong></div>
       <button type="button" data-act="ledger-next" aria-label="למחזור הבא" ${ui.ledgerOffset >= 0 ? 'disabled' : ''}>←</button>
     </div>
+    <dl class="ledger-sum">
+      <div><dt>הכנסות</dt><dd class="pos">${m(earned, { round: true })}</dd></div>
+      <div><dt>הוצאות</dt><dd>${m(spent, { round: true })}</dd></div>
+      <div><dt>יתרה</dt><dd class="${earned - spent < 0 ? 'neg' : ''}">${m(earned - spent, { round: true })}</dd></div>
+    </dl>
+    <div class="ledger-tools">
+      <div class="seg" role="radiogroup" aria-label="תצוגה">
+        <label><input type="radio" name="lview" value="list" data-ledger-view ${view === 'list' ? 'checked' : ''}><span>רשימה</span></label>
+        <label><input type="radio" name="lview" value="cal" data-ledger-view ${view === 'cal' ? 'checked' : ''}><span>לוח חודשי</span></label>
+      </div>
+    </div>
+    ${view === 'cal' ? renderLedgerCalendar(cycle) : ''}
     <div class="filters">
       <label class="sr-only" for="lq">חיפוש ביומן</label>
       <input id="lq" class="field" type="search" placeholder="חיפוש" value="${esc(ui.ledgerQuery)}" autocomplete="off" enterkeyhint="search">
@@ -245,32 +272,81 @@ function renderLedger() {
     <div id="ledger-results">${renderLedgerResults()}</div>`;
 }
 
+// short number for a narrow calendar cell: 75, 1.2K, 15K (the full amount is in the cell's label)
+function cellNum(a) {
+  const v = Math.round(a / 100);
+  if (v < 1000) return String(v);
+  return (Math.floor(v / 100) / 10).toFixed(v < 100000 ? 1 : 0).replace(/\.0$/, '') + 'K';
+}
+
+// Month grid with each day's spending and income
+function renderLedgerCalendar(cycle) {
+  const t = today();
+  const totals = L.dailyTotals(state, cycle);
+  const firstDow = L.fromISO(cycle.start).getDay();
+  const cells = [];
+  for (let d = cycle.start; d < cycle.end; d = L.addDays(d, 1)) {
+    const x = totals.get(d) || { spent: 0, income: 0 };
+    const dd = L.fromISO(d);
+    const sel = ui.ledgerDay === d;
+    const label = `${dd.getDate()} ב${L.MONTHS_SHORT[dd.getMonth()]}: ${x.spent ? `הוצאות ${money(x.spent)}` : 'בלי הוצאות'}${x.income ? `, הכנסות ${money(x.income)}` : ''}`;
+    cells.push(`<button type="button" class="calx-day${d === t ? ' is-today' : ''}${d > t ? ' is-future' : ''}" data-act="ledger-day" data-date="${d}" aria-pressed="${sel}" aria-label="${esc(label)}">
+      <span class="calx-n">${dd.getDate()}</span>
+      ${x.spent ? `<span class="calx-out" aria-hidden="true">${esc(cellNum(x.spent))}</span>` : ''}
+      ${x.income ? `<span class="calx-in" aria-hidden="true">+${esc(cellNum(x.income))}</span>` : ''}
+    </button>`);
+  }
+  return `<div class="calx" role="group" aria-label="לוח המחזור: לחיצה על יום מציגה את הרישומים שלו">
+    ${L.WEEKDAYS_SHORT.map((w) => `<span class="cal-wd" aria-hidden="true">${w}</span>`).join('')}
+    ${Array.from({ length: firstDow }, () => '<span aria-hidden="true"></span>').join('')}
+    ${cells.join('')}
+  </div>`;
+}
+
 function renderLedgerResults() {
   const t = today();
   const cycle = ledgerCycle();
   const q = ui.ledgerQuery.trim().toLowerCase();
   let list = L.expensesInCycle(state.expenses, cycle);
+  // future-dated fixed shares (insurance) stay out of the current month's list until their day
+  if (ui.ledgerOffset >= 0) list = list.filter((e) => e.date <= t || e.date === ui.ledgerDay);
+  let incs = ui.ledgerCat ? [] : L.incomesInCycle(state, cycle);
   if (ui.ledgerCat) list = list.filter((e) => e.catId === ui.ledgerCat);
-  if (q) list = list.filter((e) => (e.note || '').toLowerCase().includes(q) || (catById(e.catId)?.name || '').includes(q) || String(e.amount / 100).includes(q));
+  if (ui.ledgerDay) {
+    list = list.filter((e) => e.date === ui.ledgerDay);
+    incs = incs.filter((i) => i.date === ui.ledgerDay);
+  }
+  if (q) {
+    list = list.filter((e) => (e.note || '').toLowerCase().includes(q) || (catById(e.catId)?.name || '').includes(q) || String(e.amount / 100).includes(q));
+    incs = incs.filter((i) => (i.note || '').toLowerCase().includes(q) || i.source.includes(q) || String(i.amount / 100).includes(q));
+  }
   list.sort(byNewest);
-  const total = L.sumBy(list);
+  const filtered = q || ui.ledgerCat || ui.ledgerDay;
 
   const groups = new Map();
-  for (const e of list) {
-    if (!groups.has(e.date)) groups.set(e.date, []);
-    groups.get(e.date).push(e);
-  }
+  const g = (d) => {
+    if (!groups.has(d)) groups.set(d, { exps: [], incs: [] });
+    return groups.get(d);
+  };
+  for (const e of list) g(e.date).exps.push(e);
+  for (const i of incs) g(i.date).incs.push(i);
+  const days = [...groups.keys()].sort().reverse();
+  const count = list.length + incs.length;
 
-  return `<div class="ledger-total"><span class="muted small">${list.length ? `${list.length} רשומות` : ''}</span><span class="num">${esc(money(total, { round: true }))}</span></div>
+  return `<div class="ledger-total"><span class="muted small">${count ? `${count} רשומות${ui.ledgerDay ? ` ב${esc(L.dayLabel(ui.ledgerDay, t))}` : ''}` : ''}</span>
+      ${ui.ledgerDay ? '<button type="button" class="link small" data-act="ledger-all-days">כל הימים</button>' : `<span class="num">${esc(money(L.sumBy(list), { round: true }))}</span>`}</div>
     <div class="ledger-wrap">
-    ${list.length
-      ? [...groups.entries()].map(([date, items]) => `<div class="day-group">
-          <div class="day-head"><span>${esc(L.dayLabel(date, t))}</span>${m(L.sumBy(items))}</div>
-          <ul class="rows">${items.map((e) => expenseRow(e, t)).join('')}</ul>
-        </div>`).join('')
-      : `<section class="empty"><h2>${q || ui.ledgerCat ? 'לא נמצאו הוצאות' : 'אין רישומים במחזור הזה'}</h2>
-          <p>${q || ui.ledgerCat ? 'נסו מילה אחרת או בטלו את הסינון.' : 'כל הוצאה שתרשמו תופיע כאן, מסודרת לפי ימים.'}</p>
-          ${q || ui.ledgerCat ? '<button type="button" class="btn btn-line" data-act="clear-filter">ביטול הסינון</button>' : '<button type="button" class="btn btn-primary" data-act="add">לרשום הוצאה</button>'}</section>`}
+    ${count
+      ? days.map((date) => {
+          const { exps, incs: ins } = groups.get(date);
+          return `<div class="day-group">
+          <div class="day-head"><span>${esc(L.dayLabel(date, t))}</span><span>${ins.length ? `<span class="pos">${m(L.sumBy(ins), { signed: true })}</span> ` : ''}${exps.length ? m(L.sumBy(exps)) : ''}</span></div>
+          <ul class="rows">${ins.map((i) => incomeRow(i, t)).join('')}${exps.map((e) => expenseRow(e, t)).join('')}</ul>
+        </div>`;
+        }).join('')
+      : `<section class="empty"><h2>${filtered ? 'לא נמצאו רישומים' : 'אין רישומים במחזור הזה'}</h2>
+          <p>${ui.ledgerDay && !q && !ui.ledgerCat ? 'ביום הזה לא נרשם כלום.' : filtered ? 'נסו מילה אחרת או בטלו את הסינון.' : 'כל הוצאה והכנסה שתרשמו תופיע כאן, מסודרת לפי ימים.'}</p>
+          ${filtered ? '<button type="button" class="btn btn-line" data-act="clear-filter">ביטול הסינון</button>' : '<button type="button" class="btn btn-primary" data-act="add">לרשום הוצאה</button>'}</section>`}
     </div>`;
 }
 
@@ -417,6 +493,20 @@ function renderInsights() {
     <div class="sec-head"><h2 class="sec-title" id="tips-h">איפה אפשר להשתפר</h2><span class="small muted">המחזור הנוכחי</span></div>
     ${tips.length ? tipsList(tips) : '<p class="block-p">בינתיים אין כאן מה לתקן. ההוצאות בקצב טוב.</p>'}
   </section>`);
+
+  // Where the money went — ranked bars, one hue, largest first
+  const shares = L.categoryShares(state, curCycle);
+  if (shares.length) {
+    const max = shares[0].amount;
+    parts.push(`<section class="section-gap" aria-labelledby="sh-h">
+      <div class="sec-head"><h2 class="sec-title" id="sh-h">לאן הלך הכסף</h2><span class="small muted">המחזור הנוכחי</span></div>
+      <ul class="shares">${shares.map((r) => `<li>
+        <span class="sh-name"><i class="dot" style="background:${r.cat.color}" aria-hidden="true"></i>${esc(r.cat.name)}</span>
+        <span class="sh-bar" aria-hidden="true"><span style="width:${((r.amount / max) * 100).toFixed(1)}%"></span></span>
+        <span class="sh-val">${m(r.amount, { round: true })} <span class="muted">${Math.round(r.share * 100)}%</span></span>
+      </li>`).join('')}</ul>
+    </section>`);
+  }
 
   // Monthly reports
   const reports = [];
@@ -572,7 +662,7 @@ function renderReport() {
       <li class="ie-row"><span class="ie-l">הכנסות</span><span class="ie-v">${m(r.income, { round: true })}</span><span class="ie-bar" aria-hidden="true"><span class="ie-in" style="width:${pct(r.income)}%"></span></span></li>
       <li class="ie-row"><span class="ie-l">הוצאות</span><span class="ie-v">${m(r.spent, { round: true })}</span><span class="ie-bar" aria-hidden="true"><span class="ie-fixed" style="width:${pct(r.fixed)}%"></span><span class="ie-var" style="width:${pct(r.variable)}%"></span></span></li>
     </ul>
-    ${r.incomeSource === 'setting' ? '<p class="small muted">אין צ׳ק־אין לחודש הזה, אז ההכנסה לקוחה מההגדרות.</p>' : ''}
+    ${r.incomeSource === 'setting' ? '<p class="small muted">אין צ׳ק־אין לחודש הזה, אז ההכנסה לקוחה מההגדרות.</p>' : r.incomeSource === 'entries' ? '<p class="small muted">לפי ההכנסות שרשמת במחזור.</p>' : ''}
     <p class="small muted ie-legend"><span><i class="ie-fixed" aria-hidden="true"></i>קבועות ${m(r.fixed, { round: true })}</span><span><i class="ie-var" aria-hidden="true"></i>משתנות ${m(r.variable, { round: true })}</span></p>
     ${r.prevSpent ? `<p class="block-p">${r.delta > 0 ? `הוצאת <strong class="neg">${m(r.delta, { round: true })} יותר</strong>` : r.delta < 0 ? `הוצאת <strong class="pos">${m(-r.delta, { round: true })} פחות</strong>` : 'הוצאת בדיוק כמו'} לעומת המחזור הקודם (${m(r.prevSpent, { round: true })}).</p>` : ''}
   </section>`);
@@ -883,7 +973,58 @@ for (const d of $$('dialog')) {
 }
 
 /* ---------- add / edit expense ---------- */
-const add = { str: '', catId: null, editingId: null, catTouched: false, places: [], shown: [] };
+const add = {
+  str: '', catId: null, editingId: null, catTouched: false, places: [], shown: [],
+  kind: 'expense', source: L.INCOME_SOURCES[0], standing: null, standingManual: false,
+};
+
+// expense <-> income
+function setKind(kind) {
+  add.kind = kind;
+  const inc = kind === 'income';
+  const r = $(`#add-kind input[value="${kind}"]`);
+  if (r) r.checked = true;
+  $('#add-title').textContent = add.editingId ? (inc ? 'עריכת הכנסה' : 'עריכת הוצאה') : inc ? 'הכנסה חדשה' : 'הוצאה חדשה';
+  $('#add-cats-wrap').hidden = inc;
+  $('#add-sources-wrap').hidden = !inc;
+  $('#add-note').placeholder = inc ? 'פירוט (לא חובה)' : 'איפה? (שופרסל, ארומה…)';
+  $('#add-amount').classList.toggle('is-income', inc);
+  $('#add-spread').hidden = inc || !!add.editingId;
+  // the kind can't change while editing an existing record
+  $$('#add-kind input').forEach((i) => { i.disabled = !!add.editingId; });
+  updatePlaces();
+  updateAddUI();
+}
+
+// "Is this a monthly standing order?" for subscription-like expenses
+function updateStanding() {
+  const box = $('#standing');
+  const link = $('#standing-open');
+  if (add.kind !== 'expense' || add.editingId) {
+    box.hidden = true;
+    link.hidden = true;
+    return;
+  }
+  const d = draft();
+  const h = L.standingOrderHint(state, d);
+  box.classList.toggle('is-info', !!h.existing);
+  $('#standing-opts').hidden = !!h.existing;
+  if (h.existing) {
+    $('#standing-q').textContent = `״${h.existing.name}״ כבר מוגדר כהוראת קבע ונרשם לבד ב־${h.existing.day} בכל חודש.`;
+    box.hidden = false;
+    link.hidden = true;
+    return;
+  }
+  const show = h.ask || add.standingManual;
+  box.hidden = !show;
+  link.hidden = show;
+  $('#standing-q').textContent = h.reason === 'pattern'
+    ? 'זה הופיע גם בחודשים קודמים באותו סכום. הוראת קבע שיורדת כל חודש?'
+    : h.reason === 'category' || h.reason === 'keyword'
+      ? 'נראה כמו מנוי. זה יורד כל חודש? (הוראת קבע)'
+      : 'זה יורד כל חודש? (הוראת קבע)';
+  $$('#standing-opts [data-standing]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.standing === add.standing)));
+}
 
 function setAddCat(id) {
   add.catId = id;
@@ -893,6 +1034,11 @@ function setAddCat(id) {
 
 // Suggestions under the "where?" field + automatic category for remembered places
 function updatePlaces() {
+  if (add.kind === 'income') {
+    $('#place-list').hidden = true;
+    $('#place-hint').textContent = '';
+    return;
+  }
   const note = $('#add-note').value;
   const list = L.matchPlaces(add.places.filter((p) => catById(p.catId) && !catById(p.catId).archived), note, 6);
   const exact = L.findPlace(add.places, note);
@@ -923,21 +1069,25 @@ function pickPlace(p) {
   updateAddUI();
 }
 
-function openAdd({ catId, expense } = {}) {
+function openAdd({ catId, expense, income, kind } = {}) {
   const t = today();
-  add.editingId = expense?.id || null;
-  add.str = expense ? String(expense.amount / 100) : '';
+  const rec = expense || income;
+  add.editingId = rec?.id || null;
+  add.str = rec ? String(rec.amount / 100) : '';
+  add.standing = null;
+  add.standingManual = false;
+  add.source = income?.source || L.INCOME_SOURCES[0];
   const cats = activeCats();
   const ec = expense && catById(expense.catId);
   add.catId = expense?.catId || catId || (cats.find((c) => c.name === 'אוכל בחוץ') || cats[0])?.id;
 
-  $('#add-title').textContent = expense ? 'עריכת הוצאה' : 'הוצאה חדשה';
-  $('#add-note').value = expense?.note || '';
-  $('#add-date').value = expense?.date || t;
+  $('#add-note').value = rec?.note || '';
+  $('#add-date').value = rec?.date || t;
   $('#add-date').max = L.addDays(t, 366);
-  $('#add-delete').hidden = !expense;
-  $('#add-spread').hidden = !!expense;
+  $('#add-delete').hidden = !rec;
+  $('#add-delete').textContent = income ? 'מחיקת ההכנסה' : 'מחיקת ההוצאה';
   $('#add-error').textContent = '';
+  $('#add-sources').innerHTML = L.INCOME_SOURCES.map((s) => `<label class="cat-chip"><input type="radio" name="source" value="${esc(s)}" ${s === add.source ? 'checked' : ''}><span>${esc(s)}</span></label>`).join('');
 
   const list = [...cats];
   if (ec && ec.archived) list.push(ec);
@@ -945,9 +1095,7 @@ function openAdd({ catId, expense } = {}) {
 
   add.catTouched = !!expense || !!catId; // an explicit category wins over place memory
   add.places = L.learnPlaces(state.expenses, state.placePrefs);
-  updatePlaces();
-
-  updateAddUI();
+  setKind(income || kind === 'income' ? 'income' : 'expense');
   openDialog($('#sheet-add'));
   // focus the amount (not the note field) so the iOS keyboard doesn't cover the keypad
   $('#add-amount').focus({ preventScroll: true });
@@ -965,10 +1113,19 @@ function draft() {
 function updateAddUI() {
   const d = draft();
   const amtEl = $('#add-amount');
-  amtEl.textContent = add.str ? `${cur()}${add.str}` : `${cur()}0`;
+  // thousands separators while typing, keeping a trailing "." or typed decimals as-is
+  const [whole, frac] = (add.str || '0').split('.');
+  amtEl.textContent = `${cur()}${Number(whole || 0).toLocaleString('en-US')}${frac !== undefined ? '.' + frac : ''}`;
   amtEl.classList.toggle('is-empty', !add.str);
   const impactEl = $('#add-impact');
   impactEl.className = 'impact';
+  if (add.kind === 'income') {
+    impactEl.textContent = '';
+    $('#add-submit').textContent = d.amount ? `לרשום הכנסה ${money(d.amount)}` : 'לרשום הכנסה';
+    updateStanding();
+    return;
+  }
+  updateStanding();
   const c = catById(d.catId);
   const imp = L.impactOf(state, { ...d, amount: d.amount || 1, excludeId: add.editingId }, today());
   if (!c) {
@@ -1011,7 +1168,25 @@ $('#place-list').addEventListener('click', (ev) => {
   const b = ev.target.closest('[data-place]');
   if (b) pickPlace(add.shown[Number(b.dataset.place)]);
 });
-$('#add-note').addEventListener('input', updatePlaces);
+$('#add-note').addEventListener('input', () => { updatePlaces(); updateStanding(); });
+$('#add-kind').addEventListener('change', (ev) => {
+  if (ev.target.name === 'kind') setKind(ev.target.value);
+});
+$('#add-sources').addEventListener('change', (ev) => {
+  if (ev.target.name === 'source') add.source = ev.target.value;
+});
+$('#standing-opts').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-standing]');
+  if (!b) return;
+  add.standing = add.standing === b.dataset.standing ? null : b.dataset.standing;
+  updateStanding();
+});
+$('#standing-open').addEventListener('click', () => {
+  add.standingManual = true;
+  add.standing = 'yes';
+  updateStanding();
+  $('#standing-opts [data-standing="yes"]').focus();
+});
 $('#add-date').addEventListener('change', updateAddUI);
 $('#sheet-add').addEventListener('keydown', (ev) => {
   // physical keyboard support when the note field isn't focused
@@ -1038,6 +1213,10 @@ function submitAdd() {
     a.classList.add('shake');
     return;
   }
+  if (add.kind === 'income') {
+    saveIncome(d);
+    return;
+  }
   if (!catById(d.catId)) {
     $('#add-error').textContent = 'בחרו קטגוריה.';
     return;
@@ -1059,21 +1238,41 @@ function saveExpense(d, imp) {
   const pk = L.placeKey(d.note);
   const learned = !add.editingId && pk.length >= 2 && !state.placePrefs?.[pk]?.hidden
     && state.expenses.filter((e) => !e.recurringId && L.placeKey(e.note) === pk).length === L.MIN_PLACE_COUNT - 1;
+  // standing order: the answer only counts while the question is on screen
+  const standing = !add.editingId && add.standing === 'yes' && !$('#standing').hidden && !$('#standing-opts').hidden;
+  let rec = null;
   if (add.editingId) {
     const i = state.expenses.findIndex((e) => e.id === add.editingId);
     if (i >= 0) state.expenses[i] = { ...state.expenses[i], ...d };
   } else {
-    state.expenses.push({ id: L.uid(), ...d, createdAt: Date.now() });
+    const entry = { id: L.uid(), ...d, createdAt: Date.now() };
+    if (standing) {
+      rec = L.recurringFromExpense(d);
+      state.recurring.push(rec);
+      entry.recurringId = rec.id;
+    }
+    state.expenses.push(entry);
     requestPersistence();
   }
   const wasEdit = !!add.editingId;
   const savedId = wasEdit ? add.editingId : state.expenses[state.expenses.length - 1].id;
+  if (rec) state = L.applyRecurring(state, t).state; // recorded late? fill in the months since
   closeDialog($('#sheet-add'));
   closeDialog($('#sheet-over'));
   commit();
 
   const c = catById(d.catId);
-  if (imp && imp.willBeOver && imp.currentCycle) {
+  if (rec) {
+    toast(`נרשם ${money(d.amount)}. מעכשיו ״${rec.name}״ יירשם לבד ב־${rec.day} בכל חודש.`, {
+      action: 'ביטול',
+      onAction: () => {
+        state.expenses = state.expenses.filter((e) => e.recurringId !== rec.id);
+        state.recurring = state.recurring.filter((r) => r.id !== rec.id);
+        commit();
+        toast('בוטל, כולל הוראת הקבע');
+      },
+    });
+  } else if (imp && imp.willBeOver && imp.currentCycle) {
     toast(`נרשם. ${c.name}: ${money(imp.overBy)} מעל התקציב החודש.`, { alert: true });
   } else if (imp && imp.crossesWarn && imp.currentCycle) {
     toast(`שימו לב: נשארו ${money(imp.leftAfter)} ל${c.name}${imp.daysLeft ? ` — ${money(imp.perDayAfter, { round: true })} ליום עד סוף המחזור` : ''}.`, { alert: true });
@@ -1098,8 +1297,40 @@ $('#add-spread').addEventListener('click', () => {
   openSpread(null, { total: d.amount, name: d.note, catId: d.catId, start: d.date });
 });
 
+function saveIncome(d) {
+  const data = { amount: d.amount, date: d.date, note: d.note, source: add.source };
+  let savedId = add.editingId;
+  if (add.editingId) {
+    const i = state.incomes.findIndex((x) => x.id === add.editingId);
+    if (i >= 0) state.incomes[i] = { ...state.incomes[i], ...data };
+  } else {
+    savedId = L.uid();
+    state.incomes.push({ id: savedId, ...data, createdAt: Date.now() });
+  }
+  const wasEdit = !!add.editingId;
+  closeDialog($('#sheet-add'));
+  commit();
+  if (wasEdit) return toast('השינוי נשמר');
+  toast(`נרשמה הכנסה ${money(d.amount)} · ${add.source}`, {
+    action: 'ביטול',
+    onAction: () => {
+      state.incomes = state.incomes.filter((x) => x.id !== savedId);
+      commit();
+    },
+  });
+}
+
 $('#add-delete').addEventListener('click', () => {
   const id = add.editingId;
+  if (add.kind === 'income') {
+    const ii = state.incomes.findIndex((x) => x.id === id);
+    if (ii < 0) return;
+    const [gone] = state.incomes.splice(ii, 1);
+    closeDialog($('#sheet-add'));
+    commit();
+    toast('ההכנסה נמחקה', { action: 'ביטול', onAction: () => { state.incomes.push(gone); commit(); } });
+    return;
+  }
   const idx = state.expenses.findIndex((e) => e.id === id);
   if (idx < 0) return;
   const [removed] = state.expenses.splice(idx, 1);
@@ -1417,12 +1648,14 @@ function openCheckIn(period = L.checkInStatus(state, today()).period) {
   const existing = state.snapshots.find((s) => s.period === period);
   const prevSnap = state.snapshots.filter((s) => s.period < period).sort((a, b) => (a.period < b.period ? -1 : 1)).pop();
   const was = (k) => (prevSnap && prevSnap[k] ? `בפעם הקודמת: ${money(prevSnap[k], { round: true })}` : '');
+  // incomes already logged in the cycle of this check-in
+  const logged = L.sumBy(L.incomesInCycle(state, L.cycleFor(`${period}-${day}`, state.settings.cycleDay)));
   openForm({
     title: `צ׳ק־אין · ${L.monthLabelFromKey(period)}`,
     intro: 'שלושה מספרים, פעם בחודש. מהם פנקס מחשב הוצאות מול הכנסות ואת השווי שלך לאורך זמן.',
     submit: existing ? 'שמירה' : 'לשמור את החודש',
     fields: [
-      { name: 'income', label: 'כמה כסף נכנס החודש?', type: 'money', required: true, value: existing?.income ?? (prevSnap?.income || state.settings.income || 0), hint: 'משכורת וכל הכנסה אחרת, נטו' },
+      { name: 'income', label: 'כמה כסף נכנס החודש?', type: 'money', required: true, value: existing?.income ?? (logged || prevSnap?.income || state.settings.income || 0), hint: logged ? `רשמת ${money(logged, { round: true })} כהכנסות במחזור הזה` : 'משכורת וכל הכנסה אחרת, נטו' },
       { name: 'cash', label: 'כמה יש בעו״ש ובמזומן?', type: 'money', value: existing?.cash, hint: was('cash') || 'היתרה בבנק, כולל מזומן' },
       { name: 'investments', label: 'כמה שוות ההשקעות?', type: 'money', value: existing?.investments, hint: was('investments') || 'תיק מניות, קרן השתלמות, גמל להשקעה' },
       { name: 'savings', label: 'וכמה בחיסכון?', type: 'money', value: existing?.savings, hint: was('savings') || 'פיקדונות וקופות חיסכון. לא חובה' },
@@ -1546,7 +1779,19 @@ function restorePick() {
 
 /* ---------- actions (event delegation) ---------- */
 const actions = {
-  add: (el) => openAdd({ catId: el.dataset.cat }),
+  add: (el) => openAdd({ catId: el.dataset.cat, kind: el.dataset.kind }),
+  'edit-income': (el) => {
+    const i = state.incomes.find((x) => x.id === el.dataset.id);
+    if (i) openAdd({ income: i });
+  },
+  'ledger-day': (el) => {
+    ui.ledgerDay = ui.ledgerDay === el.dataset.date ? null : el.dataset.date;
+    const y = window.scrollY;
+    render();
+    window.scrollTo(0, y);
+    $(`[data-act="ledger-day"][data-date="${el.dataset.date}"]`)?.focus({ preventScroll: true });
+  },
+  'ledger-all-days': () => { ui.ledgerDay = null; render(); },
   edit: (el) => {
     const e = state.expenses.find((x) => x.id === el.dataset.id);
     if (!e) return;
@@ -1573,9 +1818,9 @@ const actions = {
     ui.ledgerQuery = '';
     go('ledger');
   },
-  'ledger-prev': () => { ui.ledgerOffset--; render(); },
-  'ledger-next': () => { if (ui.ledgerOffset < 0) ui.ledgerOffset++; render(); },
-  'clear-filter': () => { ui.ledgerQuery = ''; ui.ledgerCat = ''; render(); },
+  'ledger-prev': () => { ui.ledgerOffset--; ui.ledgerDay = null; render(); },
+  'ledger-next': () => { if (ui.ledgerOffset < 0) ui.ledgerOffset++; ui.ledgerDay = null; render(); },
+  'clear-filter': () => { ui.ledgerQuery = ''; ui.ledgerCat = ''; ui.ledgerDay = null; render(); },
   resist: (el) => openResist(el.dataset.cat),
   'del-resist': (el) => {
     const i = state.resisted.findIndex((r) => r.id === el.dataset.id);
@@ -1704,6 +1949,13 @@ $('#view').addEventListener('input', (ev) => {
 // Settings edits save in place without re-rendering, so focus/keyboard never jump.
 $('#view').addEventListener('change', (ev) => {
   const el = ev.target;
+  if (el.dataset.ledgerView !== undefined) {
+    ui.ledgerView = el.value;
+    ui.ledgerDay = null;
+    render();
+    $(`[data-ledger-view][value="${el.value}"]`)?.focus();
+    return;
+  }
   if (el.id === 'lc') {
     ui.ledgerCat = el.value;
     $('#ledger-results').innerHTML = renderLedgerResults();
