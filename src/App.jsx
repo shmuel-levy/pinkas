@@ -14,6 +14,7 @@ import { U } from './store/uiSlice.js';
 import { Toast, useOverlay } from './components/UiProvider.jsx';
 import { FormSheet } from './sheets/FormSheet.jsx';
 import { AddSheet } from './sheets/AddSheet.jsx';
+import { DaySheet } from './sheets/DaySheet.jsx';
 import { Story } from './components/Story.jsx';
 import { Celebrate, StreakFx, StreakSheet, Tour, Welcome } from './components/Overlays.jsx';
 import { HomePage } from './pages/HomePage.jsx';
@@ -70,6 +71,7 @@ export default function App() {
 
   const sub = ui.quiz ? 'quiz' : ui.sub;
   const pageKey = pre || sub || ui.tab;
+  const subTitle = sub === 'quiz' && ui.quiz?.id === 'profile' ? 'הפרופיל שלך' : TITLES[sub];
 
   /* ---------- theme ---------- */
   useEffect(() => {
@@ -78,15 +80,16 @@ export default function App() {
   }, [state.settings.theme]);
 
   useEffect(() => {
-    document.title = pre ? 'פנקס' : `${TITLES[sub] || TAB_TITLES[ui.tab]} · פנקס`;
-  }, [pre, sub, ui.tab]);
+    document.title = pre ? 'שקל בצד' : `${subTitle || TAB_TITLES[ui.tab]} · שקל בצד`;
+  }, [pre, sub, ui.tab, subTitle]);
 
   /* ---------- the startup sequence ---------- */
   const runPageTour = useCallback((key, force = false) => {
     const s = store.getState().data;
     const steps = PAGE_TOURS[key];
     if (!steps || (!force && s.settings.toursSeen?.[key]) || ovRef.current.tour) return false;
-    ovRef.current.startTour({ id: Date.now(), key, steps, mandatory: 3 });
+    const level = s.settings.level;
+    ovRef.current.startTour({ id: Date.now(), key, steps, mandatory: level === 'beginner' ? 4 : level === 'pro' ? 1 : 3 });
     return true;
   }, [store]);
 
@@ -215,7 +218,7 @@ export default function App() {
           <header className="top" id="top">
             <div className="top-row">
               {sub && <button className="back" id="btn-back" type="button" onClick={back}><span aria-hidden="true">→</span> חזרה</button>}
-              <h1 className="brand" id="brand">{TITLES[sub] || 'פנקס'}</h1>
+              <h1 className="brand" id="brand">{subTitle || 'שקל בצד'}</h1>
               <div className="top-actions">
                 {!sub && streak > 0 && (
                   <button type="button" className="streak-chip" id="streak-chip" aria-label={`רצף של ${streak} ימים. פתיחת לוח הרצף`} onClick={() => ov.openStreak(L.monthKey(t))}>
@@ -261,6 +264,7 @@ export default function App() {
         )}
       </div>
 
+      <DaySheet />
       <AddSheet />
       <FormSheet />
       <Story />

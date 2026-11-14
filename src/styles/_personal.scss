@@ -1,0 +1,69 @@
+// The personal layer: greeting, first steps, beginner tips, the day sheet, the profile questions.
+@use 'tokens';
+
+/* greeting at the top of home */
+.hello { padding: 2px var(--gutter) 14px; }
+.hello-h { font-family: var(--f-display); font-weight: 700; font-size: 1.35rem; line-height: 1.25; }
+.hello-p { color: var(--ink-2); font-size: 0.95rem; margin-top: 2px; }
+
+/* beginner tip */
+.tip-box {
+  display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; align-items: start;
+  margin: 0 0 16px; padding: 12px 14px; border-radius: 12px;
+  background: color-mix(in srgb, var(--gold) 12%, var(--paper)); border: 1px solid color-mix(in srgb, var(--gold) 40%, transparent);
+  font-size: 0.92rem; color: var(--ink);
+}
+main > .tip-box { margin-inline: var(--gutter); }
+.tip-ic { width: 20px; height: 20px; fill: none; stroke: var(--gold-ink); stroke-width: 2; stroke-linecap: round; margin-top: 2px; }
+.tip-body strong { display: block; margin-bottom: 2px; }
+.tip-body p { color: var(--ink-2); }
+.tip-box .link { grid-column: 2; justify-self: start; min-height: 32px; padding: 2px 0; }
+
+/* first steps */
+.steps-card { margin: 0 var(--gutter) 22px; padding: 16px; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--paper-2); }
+.steps-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+.steps-title { font-weight: 700; font-size: 1.05rem; }
+.steps-meter { height: 6px; border-radius: 3px; background: var(--paper-3); overflow: hidden; margin: 8px 0 10px; }
+.steps-meter span { display: block; height: 100%; background: var(--good); border-radius: 3px; transition: width 600ms var(--ease-out); }
+.steps-list { list-style: none; padding: 0; display: grid; gap: 2px; }
+.step-btn {
+  width: 100%; display: grid; grid-template-columns: 26px 1fr auto; gap: 10px; align-items: center; text-align: start;
+  background: none; border: 0; padding: 9px 0; min-height: 52px; color: inherit; font: inherit; border-top: 1px solid var(--rule-soft);
+}
+.steps-list li:first-child .step-btn { border-top: 0; }
+.step-check { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--rule); display: grid; place-items: center; }
+.step-check svg { width: 14px; height: 14px; fill: none; stroke: var(--paper); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.is-done .step-check { background: var(--good); border-color: var(--good); }
+.is-done .step-t { text-decoration: line-through; color: var(--ink-3); }
+.step-t { font-weight: 500; display: block; }
+.step-s { display: block; font-size: 0.85rem; color: var(--ink-3); }
+.step-go { color: var(--gold-ink); font-size: 1.1rem; }
+.steps-card .link { margin-top: 6px; }
+
+/* focus card (what matters to you) */
+.focus-card { margin: 0 var(--gutter) 22px; }
+
+/* calendars: every day is a button */
+button.cal-day { font: inherit; cursor: pointer; width: 100%; }
+button.scal-day { font: inherit; cursor: pointer; background: transparent; color: inherit; width: 100%; }
+button.scal-day.is-open { background: #F6D7A8; color: #5A2E0B; }
+button.scal-day.is-missed { background: var(--paper-2); color: var(--ink-3); }
+button.cal-day:focus-visible, button.scal-day:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+/* day sheet */
+.day-nav { display: flex; align-items: center; justify-content: space-between; margin: -4px 0 12px; }
+.day-nav button { min-width: 44px; min-height: 44px; border: 1px solid var(--rule); border-radius: 50%; background: transparent; color: var(--ink); font-size: 1.1rem; }
+.day-sum { margin: 0 0 12px; }
+.day-verdict { font-size: 0.95rem; padding: 10px 12px; border-radius: 10px; background: var(--paper-2); margin-bottom: 14px; }
+.day-verdict.is-good { background: color-mix(in srgb, var(--good) 14%, var(--paper)); }
+.day-verdict.is-warn { background: color-mix(in srgb, var(--warn) 14%, var(--paper)); }
+.day-block { margin-bottom: 16px; }
+.day-h { font-size: 0.95rem; font-weight: 700; margin-bottom: 6px; }
+.day-sheet .rows { margin: 0; }
+.day-opened { margin: 4px 0 8px; }
+
+/* profile questions */
+.quiz-text { font-size: 1.15rem; }
+.profile-row .seg { flex-wrap: wrap; }
+.day-head-btn { background: none; border: 0; padding: 6px 0; min-height: 36px; font: inherit; color: inherit; text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 4px; cursor: pointer; }
+.day-rel { font-weight: 500; color: var(--ink-2); }

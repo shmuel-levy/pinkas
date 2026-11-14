@@ -52,13 +52,19 @@ export function Welcome() {
   const { welcome, setWelcome } = useOverlay();
   const dispatch = useDispatch();
   const go = useRef(null);
+  const { name, level } = useSelector((s) => s.data.settings);
   useEffect(() => { if (welcome) go.current?.focus({ preventScroll: true }); }, [welcome]);
+  const text = level === 'beginner'
+    ? 'מתחילים בקטן, בלי לחץ. ההדרכה מראה את הדברים הכי חשובים, ובמסך הראשי מחכה לך רשימה של צעדים ראשונים — אחד בכל פעם.'
+    : level === 'pro'
+      ? 'הכל מוכן. ההדרכה קצרה — כמה שניות, ורק מה שחשוב.'
+      : 'הכסף שלך, במקום אחד. ההדרכה לוקחת דקה ומראה את הדברים הכי חשובים.';
   return (
     <Sheet open={welcome} onClose={() => setWelcome(false)} className="sheet sheet-welcome" labelledBy="welcome-title" closeOnBackdrop={false}>
       <div className="sheet-body">
         <img className="welcome-logo" src="icons/icon-192.png" alt="" width="88" height="88" />
-        <h2 id="welcome-title">ברוך הבא לפנקס</h2>
-        <p className="welcome-text">הכסף שלך, במקום אחד. פעם ראשונה כאן? ההדרכה לוקחת דקה ומראה את הדברים הכי חשובים.</p>
+        <h2 id="welcome-title">{name ? `שמחים שהגעת, ${name}` : 'ברוכים הבאים לשקל בצד'}</h2>
+        <p className="welcome-text">{text}</p>
         <div className="sheet-actions">
           {/* closing hands over to the startup sequence, which starts the home guide (not seen yet) */}
           <button type="button" className="btn btn-primary" ref={go} onClick={() => setWelcome(false)}>המשך להדרכה</button>
@@ -88,7 +94,7 @@ function StreakFxBody({ close }) {
       <p className="sfx-num"><span className="sfx-old">{Math.max(0, n - 1)}</span><span className="sfx-new">{n}</span></p>
       <h2 id="streak-fx-title">{n === 1 ? 'יום ראשון ברצף' : `${n} ימים ברצף`}</h2>
       <p className="sfx-text">
-        {n === 1 ? 'כל יום שנכנסים לפנקס — הקופה מתחממת. נתראה מחר.' : n >= best && n > 2 ? 'שיא חדש. ככה בונים הרגל.' : 'חזרת גם היום. עוד יום נוסף לרצף.'}
+        {n === 1 ? 'כל יום שנכנסים לשקל בצד — הקופה מתחממת. נתראה מחר.' : n >= best && n > 2 ? 'שיא חדש. ככה בונים הרגל.' : 'חזרת גם היום. עוד יום נוסף לרצף.'}
       </p>
       <button type="button" className="btn btn-gold" ref={ok} onClick={close}>יאללה</button>
     </div>
@@ -114,6 +120,7 @@ export function StreakFx() {
 /* ---------- streak calendar ---------- */
 function StreakCalendar({ monthKey, setMonth }) {
   const state = useSelector((s) => s.data);
+  const { openDay } = useOverlay();
   const t = L.todayISO();
   const n = L.streakCount(state.visits, t);
   const best = L.bestStreak(state.visits);
@@ -133,7 +140,7 @@ function StreakCalendar({ monthKey, setMonth }) {
         <strong>{L.monthLabelFromKey(monthKey)}</strong>
         <button type="button" aria-label="לחודש הבא" disabled={isCur} onClick={() => setMonth(L.nextMonthKey(monthKey, 1))}>←</button>
       </div>
-      <div className="scal" role="list" aria-label="פעילות בחודש">
+      <div className="scal" role="group" aria-label="פעילות בחודש: לחיצה על יום פותחת אותו">
         {L.WEEKDAYS_SHORT.map((w) => <span key={w} className="cal-wd" aria-hidden="true">{w}</span>)}
         {Array.from({ length: mo.firstDow }, (_, i) => <span key={`b${i}`} aria-hidden="true" />)}
         {mo.days.map((d) => {
@@ -141,7 +148,7 @@ function StreakCalendar({ monthKey, setMonth }) {
           const logged = d.exp + d.inc;
           const cls = d.future ? 'is-future' : d.opened ? 'is-open' : 'is-missed';
           const label = `${day}: ${d.future ? 'עוד לא הגיע' : `${d.opened ? 'נכנסת' : 'לא נכנסת'}${logged ? `, ${d.exp ? `${d.exp} הוצאות` : ''}${d.exp && d.inc ? ' ו־' : ''}${d.inc ? `${d.inc} הכנסות` : ''}` : ', בלי רישומים'}`}`;
-          return <span key={d.date} className={`scal-day ${cls}${d.today ? ' is-today' : ''}`} role="listitem" aria-label={label}>{day}{logged > 0 && !d.future && <i className="scal-dot" />}</span>;
+          return <button type="button" key={d.date} className={`scal-day ${cls}${d.today ? ' is-today' : ''}`} aria-label={label} onClick={() => openDay(d.date)}>{day}{logged > 0 && !d.future && <i className="scal-dot" />}</button>;
         })}
       </div>
       <div className="scal-legend" aria-hidden="true"><span><i className="lg-open" />נכנסת</span><span><i className="lg-miss" />לא נכנסת</span><span><i className="lg-dot" />היו רישומים</span></div>

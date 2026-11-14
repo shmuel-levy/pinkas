@@ -1,4 +1,4 @@
-// פנקס service worker: the whole app works offline.
+// שקל בצד service worker: the whole app works offline.
 // The build fills in VERSION and SHELL below with a content hash and the list of built files
 // (see vite.config.js), so every deploy that changes a file reaches phones as an update.
 const VERSION = 'pinkas-__VERSION__';

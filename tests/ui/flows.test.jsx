@@ -12,10 +12,21 @@ const press = async (user, digits) => {
   for (const d of digits) await user.click(within(pad).getByRole('button', { name: d }));
 };
 
+// the three "who are you" questions at the start
+const answerProfile = async (user, { name = 'דנה', level = /מתחיל/, focus = /לחסוך למשהו/ } = {}) => {
+  const field = await screen.findByLabelText('השם שלך');
+  if (name) await user.type(field, name);
+  await user.click(screen.getByRole('button', { name: name ? 'המשך' : 'המשך בלי שם' }));
+  await user.click(screen.getByRole('radio', { name: level }));
+  await user.click(screen.getByRole('radio', { name: focus }));
+};
+
 describe('first run', () => {
-  it('asks for the checking balance, then welcomes, then starts the home guide', async () => {
+  it('gets to know you, asks for the checking balance, welcomes you by name, then starts the home guide', async () => {
     const user = userEvent.setup();
     const { store } = renderApp(defaultState());
+    expect(await screen.findByRole('heading', { name: 'נעים להכיר. איך לקרוא לך?' })).toBeInTheDocument();
+    await answerProfile(user);
     expect(await screen.findByRole('heading', { name: 'כמה כסף יש לך עכשיו בעו״ש?' })).toBeInTheDocument();
     await user.type(screen.getByLabelText('בעו״ש'), '4500');
     await user.type(screen.getByLabelText('ומזומן בארנק (לא חובה)'), '300');
@@ -26,9 +37,10 @@ describe('first run', () => {
     expect(s.onboarded).toBe(true);
     expect(s.balanceAnchor).toMatchObject({ checking: 450000, cash: 30000 });
     expect(s.settings.bank).toBe('otsar');
+    expect(s.settings).toMatchObject({ name: 'דנה', level: 'beginner', focus: 'save' });
     expect(saved().onboarded).toBe(true); // persisted
 
-    const welcome = await screen.findByRole('dialog', { name: 'ברוך הבא לפנקס' }, { timeout: 3000 });
+    const welcome = await screen.findByRole('dialog', { name: 'שמחים שהגעת, דנה' }, { timeout: 3000 });
     await user.click(within(welcome).getByRole('button', { name: 'המשך להדרכה' }));
     const tour = await screen.findByRole('dialog', { name: 'היתרה שלך' }, { timeout: 3000 });
     // the first three steps can't be skipped
@@ -39,6 +51,7 @@ describe('first run', () => {
   it('rejects a balance that is not a number', async () => {
     const user = userEvent.setup();
     const { store } = renderApp(defaultState());
+    await answerProfile(user, { name: '', level: /מנוסה/, focus: /להפסיק לחרוג/ });
     await user.type(await screen.findByLabelText('בעו״ש'), 'abc');
     await user.click(screen.getByRole('button', { name: 'מתחילים' }));
     expect(screen.getByRole('alert')).toHaveTextContent('צריך מספר');
@@ -63,7 +76,7 @@ describe('recording an expense', () => {
     expect(s.expenses).toHaveLength(1);
     expect(s.expenses[0]).toMatchObject({ amount: 4800, note: 'ארומה', pay: 'cash' });
     expect(L.liveBalances(s, L.todayISO()).cash).toBe(30000 - 4800);
-    expect(screen.getByRole('status')).toHaveTextContent('נרשם ₪48');
+    expect(screen.getByRole('status')).toHaveTextContent('ההוצאה הראשונה נרשמה'); // a warm word the first time
 
     await user.click(screen.getByRole('button', { name: 'ביטול' }));
     expect(store.getState().data.expenses).toHaveLength(0);
@@ -203,5 +216,83 @@ describe('monthly check-in', () => {
     expect(s.settings.bank).toBe('leumi');
     expect(s.balanceAnchor.checking).toBe(500000);
     expect(screen.getByRole('status')).toHaveTextContent('השווי שלך');
+  });
+});
+
+describe('a day, opened from any calendar', () => {
+  const t = L.todayISO();
+  const withDay = () => {
+    const s = returningUser({ settings: { level: 'pro' } });
+    const fid = s.categories.find((c) => c.name === 'אוכל בחוץ').id;
+    s.expenses = [
+      { id: 'e1', amount: 4200, catId: fid, note: 'ארומה', date: t, createdAt: Date.now(), pay: 'credit' },
+      { id: 'e2', amount: 1800, catId: fid, note: 'מאפייה', date: t, createdAt: Date.now() + 1, pay: 'cash' },
+    ];
+    s.resisted = [{ id: 'r1', name: 'משלוח סושי', amount: 9000, date: t, goalId: null, catId: fid, createdAt: 1 }];
+    return s;
+  };
+
+  it('ledger calendar: shows the day\'s entries, totals and skipped purchases, and adds to that date', async () => {
+    const user = userEvent.setup();
+    const { store } = renderApp(withDay());
+    await user.click(screen.getByRole('button', { name: 'יומן' }));
+    await user.click(screen.getByRole('radio', { name: 'לוח חודשי' }));
+    const d = Number(t.slice(8));
+    await user.click(screen.getByRole('button', { name: new RegExp(`^${d} ב.*פתיחת היום$`) }));
+    const sheet = screen.getByRole('dialog', { name: /היום$/ });
+    expect(within(sheet).getByText('2 רישומים')).toBeInTheDocument();
+    expect(within(sheet).getByRole('button', { name: /ארומה, ₪42/ })).toBeInTheDocument();
+    expect(within(sheet).getByText('משלוח סושי')).toBeInTheDocument();
+    expect(within(sheet).getAllByText('₪60').length).toBeGreaterThan(0);
+    // add an expense to this day
+    await user.click(within(sheet).getByRole('button', { name: 'להוסיף הוצאה ליום הזה' }));
+    expect(screen.getByLabelText('תאריך')).toHaveValue(t);
+    // previous day: nothing recorded
+    store.getState();
+  });
+
+  it('no-spend calendar: a day without spending says so', async () => {
+    const user = userEvent.setup();
+    const state = withDay();
+    const cyc = L.cycleFor(t, 1);
+    if (cyc.start === t) return; // first day of the month: no earlier day to open
+    renderApp(state);
+    await user.click(screen.getByRole('button', { name: 'חיסכון' }));
+    const yesterday = L.addDays(t, -1);
+    const n = Number(yesterday.slice(8));
+    await user.click(within(screen.getByRole('group', { name: /לוח המחזור/ })).getByRole('button', { name: new RegExp(`^${n} ב`) }));
+    const sheet = screen.getByRole('dialog', { name: /אתמול$/ });
+    expect(within(sheet).getByText('יום בלי הוצאות.')).toBeInTheDocument();
+  });
+});
+
+describe('getting to know you', () => {
+  it('existing users are invited to the profile questions, and beginners then get first steps and tips', async () => {
+    const user = userEvent.setup();
+    const { store } = renderApp();
+    await user.click(screen.getByRole('button', { name: 'בואו נתחיל' }));
+    expect(screen.getByRole('heading', { name: 'הפרופיל שלך' })).toBeInTheDocument();
+    await answerProfile(user, { name: 'יוסי', level: /מתחיל/, focus: /להפסיק לחרוג/ });
+    expect(store.getState().data.settings).toMatchObject({ name: 'יוסי', level: 'beginner', focus: 'spend' });
+    expect(screen.getByText(/, יוסי$/)).toBeInTheDocument(); // greeting by name
+    expect(screen.getByRole('heading', { name: 'הצעדים הראשונים שלך' })).toBeInTheDocument();
+    // a beginner tip, dismissed for good
+    await user.click(screen.getByRole('button', { name: 'יומן' }));
+    const tip = screen.getByRole('complementary', { name: 'הסבר: מה זה היומן' });
+    await user.click(within(tip).getByRole('button', { name: 'הבנתי' }));
+    expect(screen.queryByRole('complementary', { name: 'הסבר: מה זה היומן' })).toBeNull();
+    expect(store.getState().data.settings.tipsSeen.ledger).toBe(true);
+  });
+
+  it('experienced users get no tips and no first-steps list', async () => {
+    renderApp(returningUser({ settings: { level: 'pro', name: 'רון' } }));
+    expect(screen.queryByRole('heading', { name: 'הצעדים הראשונים שלך' })).toBeNull();
+    expect(screen.queryByRole('complementary')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'בואו נתחיל' })).toBeNull();
+  });
+
+  it('the app is called שקל בצד', () => {
+    renderApp(returningUser({ settings: { level: 'pro' } }));
+    expect(screen.getByRole('heading', { level: 1, name: 'שקל בצד' })).toBeInTheDocument();
   });
 });

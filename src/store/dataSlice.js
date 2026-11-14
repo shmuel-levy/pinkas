@@ -1,4 +1,4 @@
-// Everything פנקס saves lives in this slice. Reducers stay pure: ids and timestamps are created in
+// Everything שקל בצד saves lives in this slice. Reducers stay pure: ids and timestamps are created in
 // `prepare`, and all money math comes from the tested functions in lib/logic.js.
 import { createSlice } from '@reduxjs/toolkit';
 import * as L from '../lib/logic.js';
@@ -19,6 +19,8 @@ const dataSlice = createSlice({
     mergeSettings: (s, { payload }) => { Object.assign(s.settings, payload); },
     markTourSeen: (s, { payload: key }) => { s.settings.toursSeen = { ...s.settings.toursSeen, [key]: true }; },
     resetTours: (s) => { s.settings.toursSeen = {}; },
+    markTipSeen: (s, { payload: key }) => { s.settings.tipsSeen = { ...s.settings.tipsSeen, [key]: true }; },
+    resetTips: (s) => { s.settings.tipsSeen = {}; },
     setOnboarded: (s) => { s.onboarded = true; },
 
     /* expenses */

@@ -16,6 +16,7 @@ export function UiProvider({ children }) {
   const [streakMonth, setStreakMonth] = useState(null);
   const [tour, setTour] = useState(null);
   const [piggyFrom, setPiggyFrom] = useState(null);
+  const [day, setDay] = useState(null);
   const timer = useRef(null);
   const formKey = useRef(0);
 
@@ -37,9 +38,10 @@ export function UiProvider({ children }) {
     streakMonth, openStreak: (m) => setStreakMonth(m), closeStreak: () => setStreakMonth(null),
     tour, startTour: (t) => setTour(t), endTour: () => setTour(null),
     piggyFrom, setPiggyFrom,
+    day, openDay: (date) => setDay(date), closeDay: () => setDay(null),
     // anything covering the screen? (the startup sequence waits for it)
-    busy: !!(form || add || story || celebrate || welcome || streakFx || streakMonth || tour),
-  }), [toast, hideToast, toastState, form, add, story, celebrate, welcome, streakFx, streakMonth, tour, piggyFrom]);
+    busy: !!(form || add || story || celebrate || welcome || streakFx || streakMonth || tour || day),
+  }), [toast, hideToast, toastState, form, add, story, celebrate, welcome, streakFx, streakMonth, tour, piggyFrom, day]);
 
   return <UiCtx.Provider value={value}>{children}</UiCtx.Provider>;
 }

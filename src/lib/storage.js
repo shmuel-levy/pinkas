@@ -3,6 +3,8 @@
 import { uid, clampCycleDay, ASSET_TYPES, BANKS, PAY_METHODS } from './logic.js';
 
 const PAY_KEYS = PAY_METHODS.map((p) => p.key);
+export const PROFILE_LEVELS = ['beginner', 'some', 'pro'];
+export const PROFILE_FOCUS = ['spend', 'save', 'understand', 'invest'];
 
 export const STORAGE_KEY = 'pinkas.v1';
 export const SCHEMA = 1;
@@ -55,6 +57,12 @@ export function defaultState() {
       toursSeen: {}, // page -> true once its guide was shown
       streakShown: '', // date the daily streak animation last played
       lastPay: 'credit',
+      // who's using the app, from the first-run questions; the app adapts to it
+      name: '',
+      level: '', // beginner | some | pro
+      focus: '', // spend | save | understand | invest
+      tipsSeen: {}, // beginner tips dismissed
+      stepsDismissed: false, // the 'first steps' card on home
     },
     invest: { status: null, profile: null, broker: null, pension: null },
     balanceAnchor: null, // { checking, cash, at } — last balances the user stated
@@ -79,7 +87,7 @@ const str = (v, max = 120) => (typeof v === 'string' ? v.slice(0, max) : '');
 
 // Normalises any (possibly older or hand-edited) object into a valid state. Throws on garbage.
 export function normalize(raw) {
-  if (!isObj(raw)) throw new Error('הקובץ לא נראה כמו גיבוי של פנקס.');
+  if (!isObj(raw)) throw new Error('הקובץ לא נראה כמו גיבוי של שקל בצד.');
   if (!Array.isArray(raw.categories) || !Array.isArray(raw.expenses)) {
     throw new Error('בקובץ חסרות קטגוריות או הוצאות, ולכן אי אפשר לשחזר ממנו.');
   }
@@ -122,6 +130,12 @@ export function normalize(raw) {
   if (isObj(s.toursSeen)) for (const [k, v] of Object.entries(s.toursSeen)) if (v === true && /^[a-z]{1,20}$/.test(k)) settings.toursSeen[k] = true;
   settings.streakShown = isDate(s.streakShown) ? s.streakShown : '';
   settings.lastPay = PAY_KEYS.includes(s.lastPay) ? s.lastPay : 'credit';
+  settings.name = str(s.name, 24).trim();
+  settings.level = PROFILE_LEVELS.includes(s.level) ? s.level : '';
+  settings.focus = PROFILE_FOCUS.includes(s.focus) ? s.focus : '';
+  settings.tipsSeen = {};
+  if (isObj(s.tipsSeen)) for (const [k, v] of Object.entries(s.tipsSeen)) if (v === true && /^[a-z-]{1,24}$/.test(k)) settings.tipsSeen[k] = true;
+  settings.stepsDismissed = !!s.stepsDismissed;
   settings.usdRate = isObj(s.usdRate) && Number.isFinite(s.usdRate.rate) && s.usdRate.rate > 1 && s.usdRate.rate < 10 && isDate(s.usdRate.date)
     ? { rate: s.usdRate.rate, date: s.usdRate.date }
     : null;

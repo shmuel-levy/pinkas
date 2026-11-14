@@ -1,4 +1,4 @@
-// פנקס — pure logic. No DOM here, so everything is testable in Node.
+// שקל בצד — pure logic. No DOM here, so everything is testable in Node.
 // All money is stored as integer agorot (1 ₪ = 100) to avoid float drift.
 
 export const MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
@@ -1114,8 +1114,8 @@ export function reminderICS({ checkInDay, cycleDay, url = '', now = new Date() }
     'END:VEVENT',
   ];
   const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Pinkas//Budget//HE', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH'];
-  lines.push(...ev('pinkas-checkin@pinkas.app', checkInDay, 'פנקס: צ׳ק־אין חודשי', 'כמה נכנס החודש, כמה יש בעו״ש ובהשקעות. דקה אחת.'));
-  if (cycleDay !== checkInDay) lines.push(...ev('pinkas-report@pinkas.app', cycleDay, 'פנקס: הסיכום החודשי מוכן', 'הוצאות מול הכנסות, ואיפה אפשר להשתפר.'));
+  lines.push(...ev('pinkas-checkin@pinkas.app', checkInDay, 'שקל בצד: צ׳ק־אין חודשי', 'כמה נכנס החודש, כמה יש בעו״ש ובהשקעות. דקה אחת.'));
+  if (cycleDay !== checkInDay) lines.push(...ev('pinkas-report@pinkas.app', cycleDay, 'שקל בצד: הסיכום החודשי מוכן', 'הוצאות מול הכנסות, ואיפה אפשר להשתפר.'));
   lines.push('END:VCALENDAR');
   return lines.join('\r\n') + '\r\n';
 }

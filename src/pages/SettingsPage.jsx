@@ -75,6 +75,38 @@ export function SettingsPage({ onTour }) {
 
   return (
     <>
+      <section aria-labelledby="sp-prof" className="set-group" id="profile-section">
+        <div className="sec-head"><h2 className="sec-title" id="sp-prof">הפרופיל שלך</h2><button type="button" className="link" onClick={() => dispatch(U.startQuiz({ id: 'profile', answers: { name: s.name, level: s.level, focus: s.focus } }))}>לענות שוב</button></div>
+        <p className="block-p">לפי זה האפליקציה מדברת אליך, מחליטה כמה להסביר, ומה לשים במרכז המסך.</p>
+        <div className="set-row">
+          <label htmlFor="s-name">איך לקרוא לך</label>
+          <input id="s-name" className="field" key={`nm${s.name}`} defaultValue={s.name} maxLength={24} placeholder="השם שלך" autoComplete="given-name"
+            onBlur={(e) => { const v = e.target.value.trim().slice(0, 24); if (v !== s.name) setSetting('name', v); }} />
+        </div>
+        <div className="set-row profile-row">
+          <span className="label" id="lvl-l">ניסיון<span className="hint">למתחילים: יותר הסברים וצעדים ברורים</span></span>
+          <span className="seg" role="radiogroup" aria-labelledby="lvl-l">
+            {[['beginner', 'מתחיל/ה'], ['some', 'קצת'], ['pro', 'מנוסה']].map(([v, l]) => (
+              <label key={v}><input type="radio" name="level" value={v} checked={s.level === v} onChange={() => {
+                setSetting('level', v, v === 'beginner' ? 'נשמר. ההסברים הקצרים יופיעו לאורך הדרך.' : 'נשמר');
+                if (v === 'beginner') dispatch(D.resetTips());
+              }} /><span>{l}</span></label>
+            ))}
+          </span>
+        </div>
+        <div className="set-row">
+          <label htmlFor="s-focus2">מה הכי חשוב לך<span className="hint">מופיע בברכה במסך הראשי</span></label>
+          <select id="s-focus2" className="field" value={s.focus || ''} onChange={(e) => setSetting('focus', e.target.value)}>
+            <option value="" disabled>בחירה…</option>
+            <option value="spend">להפסיק לחרוג</option>
+            <option value="save">לחסוך למשהו</option>
+            <option value="understand">להבין לאן הכסף הולך</option>
+            <option value="invest">להתחיל להשקיע</option>
+          </select>
+        </div>
+        <button type="button" className="link" onClick={() => { dispatch(D.resetTips()); dispatch(D.resetTours()); dispatch(D.setSetting({ key: 'stepsDismissed', value: false })); toast('ההסברים וההדרכות יופיעו שוב'); }}>להציג שוב את ההסברים וההדרכות</button>
+      </section>
+
       <section aria-labelledby="sb-h" className="set-group">
         <div className="sec-head"><h2 className="sec-title" id="sb-h">תקציבים</h2></div>
         <div className="set-row">
@@ -144,7 +176,7 @@ export function SettingsPage({ onTour }) {
         <div className="reminder-box">
           <p><strong>תזכורת באייפון</strong> — אירוע חוזר ביומן, עם התראה ב־9:00 ביום הצ׳ק־אין{s.cycleDay !== s.checkInDay ? ' וביום שהסיכום החודשי מוכן' : ''}.</p>
           <button type="button" className="btn btn-line btn-small" onClick={act.reminder}>הוספה ליומן</button>
-          <p className="small muted">אם לא נפתח חלון של היומן: פותחים את פנקס בספארי ולוחצים שוב. או יוצרים ביומן אירוע ״חוזר כל חודש״ ב־{s.checkInDay} לחודש.</p>
+          <p className="small muted">אם לא נפתח חלון של היומן: פותחים את שקל בצד בספארי ולוחצים שוב. או יוצרים ביומן אירוע ״חוזר כל חודש״ ב־{s.checkInDay} לחודש.</p>
         </div>
         <div className="set-row">
           <label htmlFor="s-wait">זמן המתנה ברשימה<span className="hint">לפני קנייה לא מתוכננת</span></label>
@@ -187,7 +219,7 @@ export function SettingsPage({ onTour }) {
 
       <section aria-labelledby="spl-h" className="set-group">
         <div className="sec-head"><h2 className="sec-title" id="spl-h">מקומות שזכרתי</h2></div>
-        <p className="block-p">אחרי {L.MIN_PLACE_COUNT} הוצאות עם אותו שם, פנקס זוכר את המקום: מציע אותו בהקלדה ובוחר לבד את הקטגוריה.</p>
+        <p className="block-p">אחרי {L.MIN_PLACE_COUNT} הוצאות עם אותו שם, שקל בצד זוכר את המקום: מציע אותו בהקלדה ובוחר לבד את הקטגוריה.</p>
         {places.length ? places.map((p) => (
           <div className="place-edit" key={p.key}>
             <span className="place-name">{p.name}<span className="hint">{p.count} פעמים · {money(p.total, { round: true })}</span></span>
@@ -254,7 +286,7 @@ export function SettingsPage({ onTour }) {
       </section>
 
       <section aria-labelledby="sx-h" className="set-group">
-        <div className="sec-head"><h2 className="sec-title" id="sx-h">פנקס</h2></div>
+        <div className="sec-head"><h2 className="sec-title" id="sx-h">שקל בצד</h2></div>
         <div className="data-actions">
           <button type="button" className="btn btn-primary" onClick={act.share}>שליחה לחבר</button>
           <button type="button" className="btn btn-line" onClick={() => { dispatch(U.setInstall({ show: true })); window.scrollTo(0, 0); }}>איך מתקינים (אייפון ואנדרואיד)</button>
@@ -264,7 +296,7 @@ export function SettingsPage({ onTour }) {
       </section>
 
       <section className="about">
-        <p>פנקס {VERSION} · עובד גם בלי אינטרנט · הנתונים נשמרים רק במכשיר</p>
+        <p>שקל בצד {VERSION} · עובד גם בלי אינטרנט · הנתונים נשמרים רק במכשיר</p>
       </section>
     </>
   );

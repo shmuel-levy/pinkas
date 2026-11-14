@@ -1,4 +1,4 @@
-// How to put פנקס on the home screen — per platform (iPhone Safari, other iPhone browsers, Android, desktop).
+// How to put שקל בצד on the home screen — per platform (iPhone Safari, other iPhone browsers, Android, desktop).
 import { useDispatch } from 'react-redux';
 import { useUi } from '../hooks/useApp.js';
 import { D } from '../store/dataSlice.js';
@@ -50,7 +50,7 @@ export function InstallPage() {
   let lead;
   let steps;
   if (p.ios && (p.otherIOSBrowser || p.inApp)) {
-    lead = 'כדי להוסיף את פנקס למסך הבית צריך לפתוח את הקישור בספארי.';
+    lead = 'כדי להוסיף את שקל בצד למסך הבית צריך לפתוח את הקישור בספארי.';
     steps = (
       <ol className="ig-steps">
         <Step n={1}>מעתיקים את הקישור<button type="button" className="btn btn-line btn-small ig-copy" onClick={copy}>העתקת הקישור</button></Step>
@@ -59,7 +59,7 @@ export function InstallPage() {
       </ol>
     );
   } else if (p.ios) {
-    lead = 'ככה פנקס יופיע במסך הבית ויפתח כמו אפליקציה רגילה:';
+    lead = 'ככה שקל בצד יופיע במסך הבית ויפתח כמו אפליקציה רגילה:';
     steps = (
       <ol className="ig-steps">
         <Step n={1}>לוחצים על כפתור השיתוף <IconShare /> בתחתית ספארי</Step>
@@ -69,18 +69,18 @@ export function InstallPage() {
     );
   } else if (p.android) {
     const one = canPromptInstall();
-    lead = one ? 'לחיצה אחת ופנקס מותקן במסך הבית:' : 'ככה פנקס יופיע במסך הבית ויפתח כמו אפליקציה רגילה:';
+    lead = one ? 'לחיצה אחת ושקל בצד מותקן במסך הבית:' : 'ככה שקל בצד יופיע במסך הבית ויפתח כמו אפליקציה רגילה:';
     steps = one ? (
-      <button type="button" className="btn btn-primary ig-install" onClick={async () => { if (await promptInstall()) toast('פנקס הותקן. אפשר לפתוח אותו ממסך הבית.'); }}>התקנת פנקס</button>
+      <button type="button" className="btn btn-primary ig-install" onClick={async () => { if (await promptInstall()) toast('שקל בצד הותקן. אפשר לפתוח אותו ממסך הבית.'); }}>התקנת שקל בצד</button>
     ) : (
       <ol className="ig-steps">
         <Step n={1}>לוחצים על התפריט <IconDots /> {p.samsung ? 'בתחתית הדפדפן' : 'בפינה העליונה של כרום'}</Step>
         <Step n={2}>בוחרים <strong>״התקנת אפליקציה״</strong> או <strong>״הוספה למסך הבית״</strong></Step>
-        <Step n={3}>מאשרים. פנקס יופיע עם שאר האפליקציות.</Step>
+        <Step n={3}>מאשרים. שקל בצד יופיע עם שאר האפליקציות.</Step>
       </ol>
     );
   } else {
-    lead = 'פנקס בנויה לטלפון. פותחים את הקישור באייפון או באנדרואיד ומוסיפים למסך הבית:';
+    lead = 'שקל בצד בנוי לטלפון. פותחים את הקישור באייפון או באנדרואיד ומוסיפים למסך הבית:';
     steps = <div className="ig-link"><span className="num">{url}</span><button type="button" className="btn btn-line btn-small" onClick={copy}>העתקה</button></div>;
   }
 
@@ -89,7 +89,7 @@ export function InstallPage() {
       <div className="ig-hero vault">
         <img className="ig-icon-app" src="icons/icon-192.png" alt="" width="72" height="72" />
         <p className="vault-label">{fromShare ? 'חבר שלח לך את' : 'להתקנה'}</p>
-        <h1 className="ig-title" id="ig-h">פנקס</h1>
+        <h1 className="ig-title" id="ig-h">שקל בצד</h1>
         <p className="hero-sub">ניהול הוצאות, חיסכון והון. חינם, בעברית, והנתונים נשארים רק אצלך.</p>
       </div>
       <p className="ig-lead">{lead}</p>

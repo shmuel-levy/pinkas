@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview --port 5178 --strictPort",
     "test": "npm run test:logic && npm run test:ui",
-    "test:logic": "node --test tests/logic.test.mjs tests/features.test.mjs tests/spread.test.mjs tests/standing.test.mjs tests/story-invest.test.mjs tests/bank-fx.test.mjs tests/pay-streak.test.mjs",
+    "test:logic": "node --test tests/logic.test.mjs tests/features.test.mjs tests/spread.test.mjs tests/standing.test.mjs tests/story-invest.test.mjs tests/bank-fx.test.mjs tests/pay-streak.test.mjs tests/personal.test.mjs",
     "test:ui": "vitest run"
   },
   "dependencies": {

@@ -6,6 +6,7 @@ import { U } from '../store/uiSlice.js';
 import { useOverlay } from '../components/UiProvider.jsx';
 import { M } from '../components/ui.jsx';
 import { ExpenseRow, IncomeRow, byNewest } from '../components/Rows.jsx';
+import { Tip } from '../components/Tip.jsx';
 
 // short number for a narrow calendar cell: 75, 1.2K, 15K (the full amount is in the cell's label)
 export function cellNum(a) {
@@ -14,8 +15,9 @@ export function cellNum(a) {
   return (Math.floor(v / 100) / 10).toFixed(v < 100000 ? 1 : 0).replace(/\.0$/, '') + 'K';
 }
 
-function Calendar({ cycle, state, day, setDay }) {
+function Calendar({ cycle, state }) {
   const money = useMoney();
+  const { openDay } = useOverlay();
   const t = today();
   const totals = L.dailyTotals(state, cycle);
   const firstDow = L.fromISO(cycle.start).getDay();
@@ -24,10 +26,9 @@ function Calendar({ cycle, state, day, setDay }) {
     const x = totals.get(d) || { spent: 0, income: 0 };
     const dd = L.fromISO(d);
     const label = `${dd.getDate()} ב${L.MONTHS_SHORT[dd.getMonth()]}: ${x.spent ? `הוצאות ${money(x.spent)}` : 'בלי הוצאות'}${x.income ? `, הכנסות ${money(x.income)}` : ''}`;
-    const date = d;
     cells.push(
       <button key={d} type="button" className={`calx-day${d === t ? ' is-today' : ''}${d > t ? ' is-future' : ''}`}
-        aria-pressed={day === d} aria-label={label} onClick={() => setDay(day === date ? null : date)}>
+        aria-label={`${label}. פתיחת היום`} onClick={() => openDay(d)}>
         <span className="calx-n">{dd.getDate()}</span>
         {x.spent > 0 && <span className="calx-out" aria-hidden="true">{cellNum(x.spent)}</span>}
         {x.income > 0 && <span className="calx-in" aria-hidden="true">+{cellNum(x.income)}</span>}
@@ -35,7 +36,7 @@ function Calendar({ cycle, state, day, setDay }) {
     );
   }
   return (
-    <div className="calx" role="group" aria-label="לוח המחזור: לחיצה על יום מציגה את הרישומים שלו">
+    <div className="calx" role="group" aria-label="לוח המחזור: לחיצה על יום פותחת את כל מה שקרה בו">
       {L.WEEKDAYS_SHORT.map((w) => <span key={w} className="cal-wd" aria-hidden="true">{w}</span>)}
       {Array.from({ length: firstDow }, (_, i) => <span key={`b${i}`} aria-hidden="true" />)}
       {cells}
@@ -48,7 +49,7 @@ export function LedgerPage() {
   const { ledger } = useUi();
   const dispatch = useDispatch();
   const catById = useCatById();
-  const { openAdd } = useOverlay();
+  const { openAdd, openDay } = useOverlay();
   const set = (x) => dispatch(U.setLedger(x));
   const t = today();
   const cycle = L.shiftCycle(L.cycleFor(t, state.settings.cycleDay), ledger.offset);
@@ -96,13 +97,14 @@ export function LedgerPage() {
         <div><dt>הוצאות</dt><dd><M a={spent} round /></dd></div>
         <div><dt>יתרה</dt><dd className={earned - spent < 0 ? 'neg' : ''}><M a={earned - spent} round /></dd></div>
       </dl>
+      <Tip id="ledger" title="מה זה היומן">כל הוצאה והכנסה שרשמת, מסודרות לפי ימים. בלוח החודשי אפשר ללחוץ על כל יום ולראות בדיוק מה היה בו.</Tip>
       <div className="ledger-tools">
         <div className="seg" role="radiogroup" aria-label="תצוגה">
           <label><input type="radio" name="lview" value="list" checked={ledger.view === 'list'} onChange={() => set({ view: 'list', day: null })} /><span>רשימה</span></label>
           <label><input type="radio" name="lview" value="cal" checked={ledger.view === 'cal'} onChange={() => set({ view: 'cal' })} /><span>לוח חודשי</span></label>
         </div>
       </div>
-      {ledger.view === 'cal' && <Calendar cycle={cycle} state={state} day={ledger.day} setDay={(day) => set({ day })} />}
+      {ledger.view === 'cal' && <Calendar cycle={cycle} state={state} />}
       <div className="filters">
         <label className="sr-only" htmlFor="lq">חיפוש ביומן</label>
         <input id="lq" className="field" type="search" placeholder="חיפוש" value={ledger.query} autoComplete="off" enterKeyHint="search"
@@ -126,7 +128,7 @@ export function LedgerPage() {
             return (
               <div className="day-group" key={date}>
                 <div className="day-head">
-                  <span>{L.dayLabel(date, t)}</span>
+                  <button type="button" className="day-head-btn" onClick={() => openDay(date)} aria-label={`${L.dayLabel(date, t)}: פתיחת היום`}>{L.dayLabel(date, t)}</button>
                   <span>{ins.length > 0 && <><span className="pos"><M a={L.sumBy(ins)} signed /></span> </>}{ex.length > 0 && <M a={L.sumBy(ex)} />}</span>
                 </div>
                 <ul className="rows">

@@ -25,7 +25,7 @@ function UpdateWatcher() {
         const w = reg.installing;
         w?.addEventListener('statechange', () => {
           if (w.state === 'installed' && navigator.serviceWorker.controller) {
-            toast('יש גרסה חדשה של פנקס', { action: 'לרענן', onAction: () => location.reload(), ms: 15000 });
+            toast('יש גרסה חדשה של שקל בצד', { action: 'לרענן', onAction: () => location.reload(), ms: 15000 });
           }
         });
       });

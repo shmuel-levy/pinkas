@@ -82,16 +82,34 @@ function MoneyStep({ step, answers, last, onNext }) {
   );
 }
 
+// Free text (the name). Optional: an empty answer is fine.
+function TextStep({ step, answers, onNext }) {
+  const [v, setV] = useState(answers[step.key] || '');
+  const ref = useRef(null);
+  useEffect(() => { ref.current?.focus({ preventScroll: true }); }, [step]);
+  const next = () => onNext({ [step.key]: v.trim().slice(0, 24) });
+  return (
+    <>
+      <div className="form-field">
+        <label htmlFor={`qz-${step.key}`}>{step.label}</label>
+        <input id={`qz-${step.key}`} ref={ref} className="field quiz-text" maxLength={24} autoComplete="given-name" value={v} placeholder={step.placeholder || ''}
+          onChange={(e) => setV(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); next(); } }} />
+      </div>
+      <button type="button" className="btn btn-primary quiz-next" onClick={next}>{v.trim() ? 'המשך' : 'המשך בלי שם'}</button>
+    </>
+  );
+}
+
 function ChoiceStep({ step, answers, onPick }) {
   const first = useRef(null);
   useEffect(() => { first.current?.focus({ preventScroll: true }); }, [step]);
   return (
     <>
-      <div className="inv-options" role="radiogroup" aria-label={step.title}>
-        {step.options.map(([v, l], i) => (
-          <button key={v} ref={i === 0 ? first : undefined} type="button" className="inv-option" role="radio" aria-checked={Number(answers[step.key]) === v}
+      <div className="inv-options" role="radiogroup" aria-label={titleOf(step, answers)}>
+        {step.options.map(([v, l, sub], i) => (
+          <button key={v} ref={i === 0 ? first : undefined} type="button" className="inv-option" role="radio" aria-checked={String(answers[step.key]) === String(v)}
             onClick={() => { tick(8); onPick({ [step.key]: v }); }}>
-            <span className="inv-option-l">{l}</span>
+            <span className="inv-option-l">{l}</span>{sub && <span className="inv-option-s">{sub}</span>}
           </button>
         ))}
       </div>
@@ -108,6 +126,9 @@ function ChoiceStep({ step, answers, onPick }) {
   );
 }
 
+const titleOf = (step, answers) => (typeof step.title === 'function' ? step.title(answers) : step.title);
+const profileOf = (a) => ({ name: (a.name || '').trim(), level: a.level || 'some', focus: a.focus || 'spend' });
+
 export function QuizPage({ onStartDone }) {
   const state = useData();
   const { quiz } = useUi();
@@ -121,6 +142,7 @@ export function QuizPage({ onStartDone }) {
     if (quiz.id === 'start') {
       dispatch(D.setBalanceAnchor({ checking: a.checking, cash: a.cash }));
       dispatch(D.mergeSettings({
+        ...profileOf(a),
         bank: a.bank || '',
         lastSeenVersion: VERSION, // new users don't need "what's new"
         tourDone: true,
@@ -131,6 +153,15 @@ export function QuizPage({ onStartDone }) {
       dispatch(U.endQuiz());
       dispatch(U.goTab('home'));
       onStartDone?.();
+      return;
+    }
+    if (quiz.id === 'profile') {
+      const prof = profileOf(a);
+      dispatch(D.mergeSettings({ ...prof, stepsDismissed: false }));
+      if (prof.level === 'beginner') { dispatch(D.resetTips()); dispatch(D.resetTours()); }
+      dispatch(U.endQuiz());
+      window.scrollTo(0, 0);
+      toast(`תודה${prof.name ? `, ${prof.name}` : ''}. התאמתי את האפליקציה בשבילך.`);
       return;
     }
     if (a.income) dispatch(D.setSetting({ key: 'income', value: a.income }));
@@ -158,19 +189,21 @@ export function QuizPage({ onStartDone }) {
 
   return (
     <section className="quiz">
-      {quiz.id === 'start' && <div className="quiz-brand"><img src="icons/icon-192.png" alt="" width="44" height="44" /><span>פנקס</span></div>}
+      {quiz.id === 'start' && <div className="quiz-brand"><img src="icons/icon-192.png" alt="" width="44" height="44" /><span>שקל בצד</span></div>}
       {n > 1 && (
         <>
           <div className="inv-progress" role="progressbar" aria-valuemin={1} aria-valuemax={n} aria-valuenow={quiz.step + 1} aria-label={`שאלה ${quiz.step + 1} מתוך ${n}`}>
-            {steps.map((s, i) => <span key={s.title} className={i <= quiz.step ? 'on' : ''} />)}
+            {steps.map((s, i) => <span key={i} className={i <= quiz.step ? 'on' : ''} />)}
           </div>
           <p className="eyebrow">שאלה {quiz.step + 1} מתוך {n}</p>
         </>
       )}
-      <h2 className="inv-q-title quiz-title">{step.title}</h2>
+      <h2 className="inv-q-title quiz-title">{titleOf(step, quiz.answers)}</h2>
       <p className="inv-why"><span>למה שואלים?</span> {step.why}</p>
       {step.kind === 'money'
         ? <MoneyStep key={`${quiz.id}-${quiz.step}`} step={step} answers={quiz.answers} last={quiz.step === n - 1} onNext={advance} />
+        : step.kind === 'text'
+        ? <TextStep key={`${quiz.id}-${quiz.step}`} step={step} answers={quiz.answers} onNext={advance} />
         : <ChoiceStep key={`${quiz.id}-${quiz.step}`} step={step} answers={quiz.answers} onPick={advance} />}
       {(quiz.step > 0 || state.onboarded) && <button type="button" className="link" onClick={back}>{quiz.step > 0 ? 'חזרה לשאלה הקודמת' : 'ביטול'}</button>}
     </section>

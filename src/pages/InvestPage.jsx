@@ -9,6 +9,7 @@ import { D } from '../store/dataSlice.js';
 import { U } from '../store/uiSlice.js';
 import { useOverlay } from '../components/UiProvider.jsx';
 import { M } from '../components/ui.jsx';
+import { Tip } from '../components/Tip.jsx';
 
 const STATUS = [
   { key: 'investing', label: 'כבר יש לי השקעות', sub: 'תיק, גמל להשקעה או קרן השתלמות' },
@@ -163,7 +164,7 @@ function BankSection({ state }) {
     return (
       <section className="section-gap inv-bank" aria-labelledby="inv-bank-h">
         <div className="sec-head"><h2 className="sec-title" id="inv-bank-h">הבנק שלך</h2></div>
-        <p className="block-p">באיזה בנק החשבון, כמה בעו״ש וכמה מושקע דרך הבנק — מזינים בצ׳ק־אין החודשי, ופנקס יראה כאן כמה זה עולה לך.</p>
+        <p className="block-p">באיזה בנק החשבון, כמה בעו״ש וכמה מושקע דרך הבנק — מזינים בצ׳ק־אין החודשי, ושקל בצד יראה כאן כמה זה עולה לך.</p>
         <button type="button" className="btn btn-line btn-small" onClick={() => act.openCheckIn()}>לצ׳ק־אין</button>
       </section>
     );
@@ -415,10 +416,11 @@ export function InvestPage() {
   if (!inv.status) {
     return (
       <>
+        <Tip id="invest" title="לא צריך להבין הכל">מתחילים מהשאלה הראשונה, ומקבלים הסבר פשוט לפי המצב שלך. כל מונח לא מוכר מוסבר במילון בתחתית העמוד.</Tip>
         <section className="inv-hero vault" aria-labelledby="inv-h">
           <p className="vault-label">השקעות ושוק ההון</p>
           <h2 className="inv-title" id="inv-h">מה המצב שלך עם השקעות?</h2>
-          <p className="hero-sub">לפי התשובה פנקס יתאים את העמוד: השוואת עמלות בין בתי ההשקעות, בדיקת דמי ניהול בפנסיה, ומה כדאי לדעת לפני שמתחילים.</p>
+          <p className="hero-sub">לפי התשובה שקל בצד יתאים את העמוד: השוואת עמלות בין בתי ההשקעות, בדיקת דמי ניהול בפנסיה, ומה כדאי לדעת לפני שמתחילים.</p>
         </section>
         <section>
           <Options name="המצב שלך" options={STATUS} current={inv.status} onPick={(v) => {

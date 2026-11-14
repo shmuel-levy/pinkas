@@ -11,6 +11,7 @@ import { useMoney, daysWord } from '../hooks/useApp.js';
 import { Dot, M } from '../components/ui.jsx';
 import { byNewest } from '../components/Rows.jsx';
 import { tick } from '../lib/fx.js';
+import { Tip } from '../components/Tip.jsx';
 
 const PAY_ICON = {
   credit: <><path d="M3.5 7h17v11h-17z" /><path d="M3.5 10.5h17M7 15h4" /></>,
@@ -41,7 +42,7 @@ function AddBody({ opts, close }) {
   const [kind, setKind] = useState(income || opts.kind === 'income' ? 'income' : 'expense');
   const [str, setStr] = useState(rec ? String(rec.amount / 100) : opts.amount ? String(opts.amount / 100) : '');
   const [note, setNote] = useState(rec?.note || opts.note || '');
-  const [date, setDate] = useState(rec?.date || t);
+  const [date, setDate] = useState(rec?.date || opts.date || t);
   const [catId, setCatId] = useState(expense?.catId || opts.catId || (active.find((c) => c.name === 'אוכל בחוץ') || active[0])?.id);
   const [catTouched, setCatTouched] = useState(!!expense || !!opts.catId); // an explicit category wins over place memory
   const [source, setSource] = useState(income?.source || L.INCOME_SOURCES[0]);
@@ -141,6 +142,12 @@ function AddBody({ opts, close }) {
       toast(`נרשם. ${c.name}: ${money(imp.overBy)} מעל התקציב החודש.`, { alert: true });
     } else if (imp && imp.crossesWarn && imp.currentCycle) {
       toast(`שימו לב: נשארו ${money(imp.leftAfter)} ל${c.name}${imp.daysLeft ? ` — ${money(imp.perDayAfter, { round: true })} ליום עד סוף המחזור` : ''}.`, { alert: true });
+    } else if (!editingId && now.expenses.every((e) => e.recurringId || e.spreadId)) {
+      const nm = now.settings.name;
+      toast(`ההוצאה הראשונה נרשמה${nm ? `, ${nm}` : ''}. ככה בונים הרגל — רושמים כל פעם, וזה לוקח שניות.`, {
+        action: 'ביטול',
+        onAction: () => { dispatch(D.removeExpense(savedId)); toast('ההוצאה בוטלה'); },
+      });
     } else if (!editingId) {
       toast(`נרשם ${money(d.amount)} · ${c.name}${learned ? `. זכרתי את ״${d.note}״ — בפעם הבאה הקטגוריה תיבחר לבד.` : ''}`, {
         action: 'ביטול',
@@ -268,6 +275,7 @@ function AddBody({ opts, close }) {
           ))}
         </div>
 
+        {!editingId && <Tip id="add" title="איך רושמים">מקלידים סכום במקשים, כותבים איפה (לא חובה), בוחרים קטגוריה — ולוחצים ״לרשום״. בסוף שואלים איך שילמת, כדי שהיתרה תתעדכן.</Tip>}
         <div className="amount-wrap">
           <output key={shake} ref={amountRef} className={`amount${str ? '' : ' is-empty'}${isIncome ? ' is-income' : ''}${shake ? ' shake' : ''}`} tabIndex={-1} aria-live="polite" aria-label="סכום">{amountText}</output>
           <p className={`impact ${impact?.cls || ''}`} aria-live="polite">{impact?.text}</p>

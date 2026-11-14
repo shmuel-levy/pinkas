@@ -10,6 +10,8 @@ import { platform, isStandalone } from '../lib/platform.js';
 import { budgetAnswers } from './QuizPage.jsx';
 import { Bar, CountUp, Dot, M } from '../components/ui.jsx';
 import { ExpenseRow, byNewest } from '../components/Rows.jsx';
+import { AskProfile, FirstSteps, Hello } from '../components/Personal.jsx';
+import { Tip } from '../components/Tip.jsx';
 
 export function focusCat(state) {
   const active = state.categories.filter((c) => !c.archived);
@@ -64,6 +66,9 @@ export function HomePage() {
         </div>
       )}
 
+      <Hello />
+      <AskProfile />
+
       {(ci.due || renew.length > 0) && (
         <div className="notices">
           {renew.map((s) => {
@@ -103,6 +108,8 @@ export function HomePage() {
         ) : <button type="button" className="btn btn-line btn-small" onClick={act.openBalances}>להזין כמה יש בעו״ש</button>}
       </section>
 
+      <FirstSteps />
+
       {o.hasBudget && state.settings.monthlyBudget ? (
         <section className="hero vault" aria-labelledby="hero-l">
           <p className="eyebrow" id="hero-l">{o.todayLeft < 0 ? 'חרגת היום ב־' : 'מותר להוציא היום'}</p>
@@ -115,10 +122,14 @@ export function HomePage() {
         <section className="budget-cta vault" aria-labelledby="bcta-h">
           <p className="vault-label">היום</p>
           <h2 className="bcta-title" id="bcta-h">כמה מותר לך להוציא?</h2>
-          <p className="hero-sub">3 שאלות קצרות, ופנקס יגיד לך כל יום כמה אפשר להוציא — ויעצור לפני חריגה.</p>
+          <p className="hero-sub">3 שאלות קצרות, ושקל בצד יגיד לך כל יום כמה אפשר להוציא — ויעצור לפני חריגה.</p>
           <button type="button" className="btn btn-gold" onClick={() => dispatch(U.startQuiz({ id: 'budget', answers: budgetAnswers(state) }))}>להגדיר תקציב</button>
         </section>
       )}
+
+      {o.hasBudget && state.settings.monthlyBudget ? (
+        <Tip id="hero" title="מה זה ״מותר להוציא היום״?">מה שנשאר מהתקציב החודשי, מחולק לימים שנשארו. נשארת מתחת? היתרה עוברת למחר. חרגת? מחר יהיה קצת פחות.</Tip>
+      ) : null}
 
       {alerts.length > 0 && (
         <ul className="alerts" aria-label="התראות תקציב">

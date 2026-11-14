@@ -158,7 +158,7 @@ export function useActions() {
       title: item ? item.name : 'ביטוח או הוצאה שנתית',
       intro: item
         ? `${money(info.monthly)} בחודש · ${Math.min(info.passed, item.months)} מתוך ${item.months} חודשים עברו · ${info.active ? `מסתיים ב־${fullDate(info.end)}` : 'הסתיים'}.`
-        : 'משלמים פעם אחת על משהו שמכסה תקופה ארוכה? פנקס מחלק את הסכום שווה בשווה בין החודשים.',
+        : 'משלמים פעם אחת על משהו שמכסה תקופה ארוכה? שקל בצד מחלק את הסכום שווה בשווה בין החודשים.',
       submit: item ? 'שמירה' : 'לפרוס',
       fields: [
         { name: 'name', label: 'מה זה?', value: src.name || '', placeholder: 'ביטוח רכב', required: true, max: 40 },
@@ -298,7 +298,7 @@ export function useActions() {
     const entry = CHANGELOG.find((c) => c.v === VERSION) || CHANGELOG[0];
     dispatch(D.setSetting({ key: 'lastSeenVersion', value: VERSION }));
     openForm({
-      title: `מה חדש בפנקס ${entry.v}`,
+      title: `מה חדש בשקל בצד ${entry.v}`,
       body: <ul className="whats-new">{entry.items.map((i) => <li key={i}>{i}</li>)}</ul>,
       fields: [],
       submit: 'מעולה',

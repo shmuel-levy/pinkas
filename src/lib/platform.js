@@ -77,10 +77,10 @@ export async function addCalendarReminder({ checkInDay, cycleDay }) {
 
 export async function shareApp() {
   const url = `${location.origin}${location.pathname}?ref=share`;
-  const text = 'פנקס — אפליקציה לניהול הוצאות וחיסכון. חינם, בעברית, והנתונים נשארים אצלך. כשפותחים את הקישור מופיעות הוראות התקנה לאייפון או לאנדרואיד:';
+  const text = 'שקל בצד — אפליקציה לניהול הוצאות וחיסכון. חינם, בעברית, והנתונים נשארים אצלך. כשפותחים את הקישור מופיעות הוראות התקנה לאייפון או לאנדרואיד:';
   if (navigator.share) {
     try {
-      await navigator.share({ title: 'פנקס', text, url });
+      await navigator.share({ title: 'שקל בצד', text, url });
       return 'shared';
     } catch (err) {
       if (err.name === 'AbortError') return 'cancel';

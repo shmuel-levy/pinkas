@@ -1,4 +1,4 @@
-# פנקס — אפליקציית הוצאות אישית
+# שקל בצד (ShekelBatzad) — אפליקציית הוצאות אישית
 
 אפליקציית ווב (PWA) לאייפון, בנויה ב־**React + Redux Toolkit + Vite + SCSS**: נפתחת ממסך הבית כמו אפליקציה רגילה, עובדת בלי אינטרנט, ושומרת את הנתונים רק בטלפון.
 בלי שרת, בלי חשבון, בלי תשלום.
@@ -43,7 +43,7 @@
 - **תזכורת חידוש:** 30 יום לפני שהפוליסה מסתיימת מופיעה הודעה ״מתחדש בעוד X ימים — זה הזמן להשוות מחירים״. כפתור ״חידוש״ יוצר את השנה הבאה.
 
 **זיכרון מקומות**
-- אחרי 2 הוצאות עם אותו שם (למשל ״ארומה״), פנקס זוכר את המקום.
+- אחרי 2 הוצאות עם אותו שם (למשל ״ארומה״), שקל בצד זוכר את המקום.
 - בפעם הבאה הוא מציע אותו כבר בזמן ההקלדה, בוחר לבד את הקטגוריה, ואם המחיר קבוע ממלא גם את הסכום.
 - בהגדרות ← ״מקומות שזכרתי״ אפשר לשנות לכל מקום קטגוריה או לבקש לשכוח אותו.
 
@@ -90,7 +90,7 @@ git add -A && git commit -m "עדכון" && git push
 
 ## בדרך ל־App Store
 אין שרת וכל הנתיבים יחסיים, אז אפשר לעטוף את `dist` עם [Capacitor](https://capacitorjs.com):
-`npx cap init פנקס com.yourname.pinkas --web-dir=dist`, ואז `npx cap add ios` ו־Xcode (צריך מק וחשבון Apple Developer).
+`npx cap init ShekelBatzad com.yourname.shekelbatzad --web-dir=dist`, ואז `npx cap add ios` ו־Xcode (צריך מק וחשבון Apple Developer).
 
 ---
 
@@ -98,7 +98,7 @@ git add -A && git commit -m "עדכון" && git push
 
 **React 19 · Redux Toolkit · Vite · SCSS · PWA (Service Worker) · Vitest + React Testing Library · GitHub Actions CI/CD**
 
-A mobile-first, offline-first personal finance PWA in Hebrew (RTL). No backend: all data stays on the device.
+**ShekelBatzad** ("a shekel on the side") is a mobile-first, offline-first personal finance PWA in Hebrew (RTL). No backend: all data stays on the device.
 
 | Layer | What's there |
 | --- | --- |
@@ -108,7 +108,8 @@ A mobile-first, offline-first personal finance PWA in Hebrew (RTL). No backend: 
 | **Domain logic** | `src/lib/logic.js` — pure, framework-free functions: budget cycles, per-day allowance, over-budget impact, recurring charges, insurance spread over 12 months, net worth, live balances, streaks, savings tips. `src/lib/invest.js` — broker fee comparison and pension-fee calculator. |
 | **Styling** | SCSS partials with a design-token map, a `theme` mixin generating light/dark CSS variables, breakpoint and reduced-motion mixins. |
 | **PWA** | A custom Vite plugin injects the built file list and a content hash into the service worker, so the app works fully offline and every deploy reaches installed phones as an update. |
-| **Testing** | 88 unit tests for the domain logic (`node:test`) + 20 Vitest/RTL tests that drive the real app: onboarding, adding an expense through the pay step, the over-budget stop, the budget questionnaire, the monthly check-in with USD conversion, goals, investments, and loading data saved by the previous version. |
+| **Personalisation** | First-run questions (name, experience, main goal) adapt the app: a greeting by name, a first-steps checklist and short explanations for beginners, fewer prompts for experienced users. Any date in any calendar opens a day view with everything that happened that day. |
+| **Testing** | 95 unit tests for the domain logic (`node:test`) + 25 Vitest/RTL tests that drive the real app: onboarding, adding an expense through the pay step, the over-budget stop, the budget questionnaire, the monthly check-in with USD conversion, goals, investments, and loading data saved by the previous version. |
 | **CI/CD** | GitHub Actions: `npm ci` → tests → `vite build` → deploy to GitHub Pages, on every push to `main`. |
 | **Accessibility** | Checked with axe-core on every page and sheet, in light and dark mode; no horizontal overflow at 320px. |
 
@@ -120,7 +121,7 @@ npm install
 npm run dev        # http://localhost:5178
 ```
 ```bash
-npm test           # 88 בדיקות לוגיקה + 20 בדיקות ממשק (Vitest + Testing Library)
+npm test           # 95 בדיקות לוגיקה + 25 בדיקות ממשק (Vitest + Testing Library)
 ```
 ```bash
 npm run build      # dist/ לפרסום

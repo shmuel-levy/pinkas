@@ -8,6 +8,7 @@ import { D } from '../store/dataSlice.js';
 import { useOverlay } from '../components/UiProvider.jsx';
 import { CountUp, M, Sparkline } from '../components/ui.jsx';
 import { Piggy } from '../components/Piggy.jsx';
+import { Tip } from '../components/Tip.jsx';
 
 export const piggyGoal = (state) => state.goals.find((g) => g.id === state.settings.piggyGoalId && g.saved < g.target)
   || state.goals.find((g) => g.saved < g.target) || null;
@@ -104,7 +105,7 @@ export function SavePage() {
   const dispatch = useDispatch();
   const money = useMoney();
   const act = useActions();
-  const { toast, openAdd } = useOverlay();
+  const { toast, openAdd, openDay } = useOverlay();
   const t = today();
   const cycle = L.cycleFor(t, state.settings.cycleDay);
   const resistedNow = state.resisted.filter((r) => L.inCycle(r.date, cycle));
@@ -131,7 +132,9 @@ export function SavePage() {
   return (
     <>
       <PiggyBox state={state} />
+      <Tip id="save" title="חיסכון בלי לחץ">בוחרים מטרה (למשל טיסה) ומפקידים אליה כשנשאר כסף. ויתרת על קנייה? רושמים ב״ויתרתי על משהו״ — וזה נספר ככסף שנשאר אצלך.</Tip>
       <NetWorth state={state} />
+      <Tip id="networth" title="מה זו מפת הכסף?">כל מה שיש לך במקום אחד: עו״ש, מזומן, חסכונות, השקעות ופנסיה. מעדכנים פעם בחודש בצ׳ק־אין, ורואים אם ההון גדל.</Tip>
 
       <section className="save-intro" aria-labelledby="res-h">
         <p className="eyebrow" id="res-h">נשאר אצלך בזכות ויתורים, במחזור הזה</p>
@@ -199,14 +202,14 @@ export function SavePage() {
       <section className="section-gap" aria-labelledby="cal-h">
         <div className="sec-head"><h2 className="sec-title" id="cal-h">ימים בלי הוצאות</h2></div>
         <p className="block-p">{cal.noSpend ? `${cal.noSpend} ימים בלי אף הוצאה במחזור הזה${cal.streak > 1 ? `, ${cal.streak} ברצף עד אתמול` : ''}.` : 'יום שבו לא הוצאת כלום (מלבד חיובים קבועים) נצבע בירוק. נסו לצבוע שניים בשבוע.'}</p>
-        <div className="cal" role="list" aria-label="לוח המחזור">
+        <div className="cal" role="group" aria-label="לוח המחזור: לחיצה על יום פותחת אותו">
           {L.WEEKDAYS_SHORT.map((d) => <span key={d} className="cal-wd" aria-hidden="true">{d}</span>)}
           {Array.from({ length: firstDow }, (_, i) => <span key={`b${i}`} aria-hidden="true" />)}
           {cal.days.map((d) => {
             const dd = L.fromISO(d.date);
             const cls = d.today ? 'is-today' : d.future ? 'is-future' : d.spent ? 'is-spent' : 'is-free';
             const label = `${dd.getDate()} ב${L.MONTHS_SHORT[dd.getMonth()]}: ${d.future ? 'עוד לא הגיע' : d.spent ? `הוצאת ${money(d.spent)}` : d.today ? 'היום' : 'בלי הוצאות'}`;
-            return <span key={d.date} className={`cal-day ${cls}`} role="listitem" aria-label={label}>{dd.getDate()}</span>;
+            return <button type="button" key={d.date} className={`cal-day ${cls}`} aria-label={label} onClick={() => openDay(d.date)}>{dd.getDate()}</button>;
           })}
         </div>
         <div className="cal-legend" aria-hidden="true">

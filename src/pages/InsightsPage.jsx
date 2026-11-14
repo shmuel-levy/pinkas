@@ -6,6 +6,7 @@ import { useActions } from '../hooks/useActions.jsx';
 import { U } from '../store/uiSlice.js';
 import { useOverlay } from '../components/UiProvider.jsx';
 import { Dot, M } from '../components/ui.jsx';
+import { Tip } from '../components/Tip.jsx';
 
 export function Tips({ tips }) {
   return (
@@ -101,6 +102,7 @@ export function InsightsPage() {
 
   return (
     <>
+      <Tip id="insights" title="איך קוראים את זה">למעלה — הדברים שהכי כדאי לשנות, עם כמה אפשר לחסוך. למטה — לאן הלך הכסף והשוואה לחודשים קודמים. לא צריך לקרוא הכל.</Tip>
       <section aria-labelledby="tips-h">
         <div className="sec-head"><h2 className="sec-title" id="tips-h">איפה אפשר להשתפר</h2><span className="small muted">המחזור הנוכחי</span></div>
         {tips.length ? <Tips tips={tips} /> : <p className="block-p">בינתיים אין כאן מה לתקן. ההוצאות בקצב טוב.</p>}
