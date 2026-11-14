@@ -353,7 +353,7 @@ function Results({ state, setQ, wipe }) {
       {state.invest.status === 'investing' && <Portfolio state={state} />}
       <BankSection state={state} />
 
-      <section aria-labelledby="inv-notes-h">
+      <section className="section-gap" aria-labelledby="inv-notes-h">
         <div className="sec-head"><h2 className="sec-title" id="inv-notes-h">מה חשוב לדעת</h2></div>
         <ol className="tips">{plan.notes.map((n) => <li key={n.title}><p className="tip-title">{n.title}</p><p className="tip-detail">{n.text}</p></li>)}</ol>
       </section>

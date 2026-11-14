@@ -39,7 +39,7 @@ function CycleChart({ totals, budget, cur }) {
         {budget > 0 && (
           <>
             <line className="budget-line" x1="0" x2={W} y1={y(budget).toFixed(1)} y2={y(budget).toFixed(1)} />
-            <text className="budget-label" x={W - 2} y={(y(budget) - 4).toFixed(1)} textAnchor="end">תקציב {compact(budget)}</text>
+            <text className="budget-label" x={W - 2} y={(y(budget) - 4).toFixed(1)} textAnchor="end">{`תקציב ⁦${compact(budget)}⁩`}</text>
           </>
         )}
         {ordered.map((x, i) => {
@@ -48,7 +48,7 @@ function CycleChart({ totals, budget, cur }) {
           return (
             <g key={x.cycle.start}>
               <rect className={`b ${x.current ? 'cur' : ''}`} x={bx.toFixed(1)} y={by.toFixed(1)} width={bw.toFixed(1)} height={(H - pad - by).toFixed(1)} rx="2" />
-              <text className="val" x={(bx + bw / 2).toFixed(1)} y={(by - 6).toFixed(1)} textAnchor="middle">{compact(x.total)}</text>
+              <text className="val" x={(bx + bw / 2).toFixed(1)} y={(by - 6).toFixed(1)} textAnchor="middle">{`⁦${compact(x.total)}⁩`}</text>
               <text x={(bx + bw / 2).toFixed(1)} y={H - 6} textAnchor="middle">{L.shortCycleLabel(x.cycle)}</text>
             </g>
           );
